@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-src\googletest\src\gtest-all.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-src\googlemock\src\gmock-all.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-src\googlemock\src\gmock_main.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-src\googlemock\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{02B4F75D-99AB-3FC3-A9FA-3D563C64B4D0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -48,6 +48,7 @@ namespace zero_mate::arm1176jzf_s
 
     void CCPU_Core::Add_Coprocessor(std::uint32_t id, const std::shared_ptr<coprocessor::ICoprocessor>& coprocessor)
     {
+        coprocessor->Set_CPU_Core(weak_from_this());
         m_coprocessors[id] = coprocessor;
     }
 

@@ -1,0 +1,10 @@
+^C:\USERS\ROSAJ\SOURCE\REPOS\DIPLOMOVA_PRACE\PERIPHERALS\RESERVOIR\BUILD\CMAKEFILES\6BC75C30E326F554E8D9A7ADB4B4D872\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/Users/rosaj/source/repos/diplomova_prace/peripherals/reservoir -BC:/Users/rosaj/source/repos/diplomova_prace/peripherals/reservoir/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/rosaj/source/repos/diplomova_prace/peripherals/reservoir/build/Reservoir.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

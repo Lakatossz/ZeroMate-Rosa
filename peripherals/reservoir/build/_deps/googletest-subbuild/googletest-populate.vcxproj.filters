@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\c5bf5698d0dd25cb27acbb48ac7e6d9d\googletest-populate-test.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\16e627937e17a1a3fd3bf76dcd56424e\googletest-populate-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\d7fde021a80405af3eb9b699824f3c3d\googletest-populate.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\rosaj\source\repos\diplomova_prace\peripherals\reservoir\build\_deps\googletest-subbuild\CMakeFiles\googletest-populate" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{83226863-7DC3-3816-8B85-35E1895722BC}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

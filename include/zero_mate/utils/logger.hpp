@@ -14,8 +14,20 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <string>
+#include <iostream>
 #include <string_view>
 /// \endcond
+
+#ifdef _WIN32
+#ifdef ZM_LOGGING_SYSTEM_EXPORT
+#define LOGGER_API __declspec(dllexport)
+#else
+#define LOGGER_API __declspec(dllimport)
+#endif
+#else
+#define LOGGER_API
+#endif
 
 namespace zero_mate::utils
 {
@@ -23,7 +35,7 @@ namespace zero_mate::utils
     /// \class ILogger
     /// \brief This class represents a logging_system interface.
     // -----------------------------------------------------------------------------------------------------------------
-    class ILogger
+    class LOGGER_API ILogger
     {
     public:
         // -------------------------------------------------------------------------------------------------------------

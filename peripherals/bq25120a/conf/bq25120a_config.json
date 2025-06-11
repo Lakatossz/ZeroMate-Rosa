@@ -1,0 +1,20 @@
+{
+  "configuration": [
+    {
+      "full_capacity": [ 4000 ],
+      "capacity_downfall": [ 10 ],
+      "referenced_temperature": [ 25 ],
+      "higher_temperature": [ 50 ],
+      "lower_temperature": [ 5 ],
+      "referenced_charge": [ 100 ],
+      "higher_charge": [ 100 ],
+      "lower_charge": [ 10 ],
+      "referenced_voltage": [ 3700 ],
+      "higher_voltage": [ 4200 ],
+      "lower_voltage": [ 3000 ],
+      "referenced_current": [ 100 ],
+      "higher_current": [ 1000 ],
+      "lower_current": [ 50 ]
+    }
+  ]
+}

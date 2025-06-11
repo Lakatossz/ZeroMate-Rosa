@@ -15,6 +15,7 @@
 
 #include "cp10.hpp"
 #include "zero_mate/utils/singleton.hpp"
+#include "../../arm1176jzf_s/core.hpp"
 
 namespace zero_mate::coprocessor::cp10
 {
@@ -500,7 +501,23 @@ namespace zero_mate::coprocessor::cp10
         // Is it a load operation?
         if (is_load_op)
         {
-            m_regs[vd_idx] = m_bus->Read<std::uint32_t>(addr);
+            if (auto core = m_cpu_core.lock())
+            {
+                const std::uint32_t physical_addr = core->Convert_Virtual_Addr_To_Physical_Addr(addr, false);
+                    m_regs[vd_idx] = m_bus->Read<std::uint32_t>(physical_addr);
+            }
+            else
+            {
+                if (auto core = m_cpu_core.lock())
+                {
+                    const std::uint32_t physical_addr = core->Convert_Virtual_Addr_To_Physical_Addr(addr, false);
+                        m_bus->Write<std::uint32_t>(physical_addr, m_regs[vd_idx].Get_Value_As<std::uint32_t>());
+                }
+                else
+                {
+                    m_bus->Write<std::uint32_t>(addr, m_regs[vd_idx].Get_Value_As<std::uint32_t>());
+                }
+            }
         }
         else
         {
@@ -560,7 +577,23 @@ namespace zero_mate::coprocessor::cp10
             if (is_load_instruction)
             {
                 // Read the value from the current address and store it into the current single-precision register.
-                m_regs[idx] = m_bus->Read<std::uint32_t>(addr);
+                if (auto core = m_cpu_core.lock())
+                {
+                    const std::uint32_t physical_addr = core->Convert_Virtual_Addr_To_Physical_Addr(addr, false);
+                    m_regs[idx] = m_bus->Read<std::uint32_t>(physical_addr);
+                }
+                else
+                {
+                    if (auto core = m_cpu_core.lock())
+                    {
+                        const std::uint32_t physical_addr = core->Convert_Virtual_Addr_To_Physical_Addr(addr, false);
+                        m_bus->Write<std::uint32_t>(physical_addr, m_regs[idx].Get_Value_As<std::uint32_t>());
+                    }
+                    else
+                    {
+                        m_bus->Write<std::uint32_t>(addr, m_regs[idx].Get_Value_As<std::uint32_t>());
+                    }
+                }
             }
             else
             {

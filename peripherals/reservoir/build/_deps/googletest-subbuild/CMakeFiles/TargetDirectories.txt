@@ -1,0 +1,3 @@
+C:/Users/rosaj/source/repos/diplomova_prace/peripherals/reservoir/build/_deps/googletest-subbuild/CMakeFiles/googletest-populate.dir
+C:/Users/rosaj/source/repos/diplomova_prace/peripherals/reservoir/build/_deps/googletest-subbuild/CMakeFiles/ALL_BUILD.dir
+C:/Users/rosaj/source/repos/diplomova_prace/peripherals/reservoir/build/_deps/googletest-subbuild/CMakeFiles/ZERO_CHECK.dir

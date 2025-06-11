@@ -1,0 +1,10 @@
+{
+  "configuration": [
+    {
+      "referenced_value": [ 50 ],
+      "higher_value": [ 150 ],
+      "lower_value": [ 10 ],
+      "start_with": [ 0 ]
+    }
+  ]
+}

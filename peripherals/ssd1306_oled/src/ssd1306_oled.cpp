@@ -153,11 +153,13 @@ void CSSD1036_OLED::GPIO_Subscription_Callback(std::uint32_t pin_idx)
     if (pin_idx == m_sda_pin_idx)
     {
         // Call SDA callback.
+        m_logging_system->Info("SDA_Pin_Change_Callback");
         SDA_Pin_Change_Callback(curr_pin_state);
     }
     else if (pin_idx == m_scl_pin_idx)
     {
         // Call SCL callback.
+        m_logging_system->Info("SCL_Pin_Change_Callback");
         SCL_Pin_Change_Callback(curr_pin_state);
     }
 
@@ -165,11 +167,12 @@ void CSSD1036_OLED::GPIO_Subscription_Callback(std::uint32_t pin_idx)
     // Definition of a stop bit: SDA goes high after SCL
     const bool stop_bit_detected = m_sda_rising_edge && m_scl_rising_edge &&
                                    (m_sda_rising_edge_timestamp - m_scl_rising_edge_timestamp) == 1 &&
-                                   m_transaction.state == NState_Machine::Data;
+        (m_transaction.state == NState_Machine::Data && (m_transaction.data_idx == 0 || m_transaction.data_idx == 7));
 
     // If a stop bit has just been detected, terminate the current transaction.
     if (stop_bit_detected)
     {
+        m_logging_system->Info(("Nastavuju Start_Bit: " + std::to_string(m_transaction.data_idx)).c_str());
         m_transaction.state = NState_Machine::Start_Bit;
         Received_Transaction_Callback();
     }
@@ -223,31 +226,37 @@ void CSSD1036_OLED::I2C_Update()
     {
         // Receive the start bit.
         case NState_Machine::Start_Bit:
+            m_logging_system->Info("Start_Bit");
             I2C_Receive_Start_Bit();
             break;
 
         // Receive the slave's address.
         case NState_Machine::Address:
+            m_logging_system->Info("Address");
             I2C_Receive_Address();
             break;
 
         // Receive the RW bit.
         case NState_Machine::RW:
+            m_logging_system->Info("RW");
             I2C_Receive_RW_Bit();
             break;
 
         // Send the ACK_1 bit.
         case NState_Machine::ACK_1:
+            m_logging_system->Info("ACK_1");
             m_transaction.state = NState_Machine::Data;
             break;
 
         // Receive data (payload).
         case NState_Machine::Data:
+            m_logging_system->Info("Data");
             I2C_Receive_Data();
             break;
 
         // Send the ACK_2 bit.
         case NState_Machine::ACK_2:
+            m_logging_system->Info("ACK_2");
             // Move on to receiving another byte.
             m_transaction.data = 0;
             m_transaction.data_idx = Data_Length;
@@ -296,6 +305,8 @@ void CSSD1036_OLED::Received_Transaction_Callback()
     {
         return;
     }
+
+    m_logging_system->Info(("Prijimam jsem: " + std::to_string(m_fifo.size())).c_str());
 
     // Check what kind of that we will be processing.
     Updated_Type_Of_Processing_Data(m_fifo[0]);

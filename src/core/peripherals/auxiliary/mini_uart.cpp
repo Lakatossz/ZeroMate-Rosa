@@ -430,16 +430,16 @@ namespace zero_mate::peripheral
         switch (status)
         {
             // All went well.
-            case CGPIO_Manager::NPin_Set_Status::OK:
+            case IGPIO_Manager::IPin::NPin_Set_Status::OK:
                 break;
 
             // The GPIO pin does not have the right function (alt).
-            case CGPIO_Manager::NPin_Set_Status::Invalid_Pin_Function:
+            case IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Function:
                 m_aux.m_logging_system.Error("Invalid function of pin");
                 break;
 
             // Invalid pin (should not happen).
-            case CGPIO_Manager::NPin_Set_Status::Invalid_Pin_Number:
+            case IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Number:
                 m_aux.m_logging_system.Error("Invalid pin number");
                 break;
         }

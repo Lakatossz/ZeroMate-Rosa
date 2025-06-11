@@ -22,13 +22,13 @@
 
 namespace zero_mate::peripheral
 {
-    CBSC::CBSC(std::shared_ptr<CGPIO_Manager> gpio)
-    : m_gpio{ gpio }
-    , m_cpu_cycles{ 0 }
-    , m_transaction_in_progress{ false }
-    , m_transaction{}
-    , m_SCL_state{ NSCL_State::SDA_Change }
-    , m_logging_system{ *utils::CSingleton<utils::CLogging_System>::Get_Instance() }
+    CBSC::CBSC(std::shared_ptr<IGPIO_Manager> gpio) noexcept
+        : m_gpio{ gpio }
+        , m_cpu_cycles{ 0 }
+        , m_transaction_in_progress{ false }
+        , m_transaction{}
+        , m_SCL_state{ NSCL_State::SDA_Change }
+        , m_logging_system{ *utils::CSingleton<utils::CLogging_System>::Get_Instance() }
     {
     }
 
@@ -46,6 +46,10 @@ namespace zero_mate::peripheral
     {
         const std::size_t reg_idx = addr / Reg_Size;
         const auto reg_type = static_cast<NRegister>(reg_idx);
+
+        m_logging_system.Info(("addr: " + std::to_string(addr)).c_str());
+        //m_logging_system.Info(("data: " + std::to_string(data)).c_str());
+        m_logging_system.Info(("size: " + std::to_string(size)).c_str());
 
         // Write data to the peripheral's registers.
         std::copy_n(data, size, &std::bit_cast<char*>(m_regs.data())[addr]);
@@ -79,6 +83,7 @@ namespace zero_mate::peripheral
         // Check if the FIFO should be cleared.
         if (Should_FIFO_Be_Cleared())
         {
+            m_logging_system.Info("Cistim fifo");
             Clear_FIFO();
         }
 
@@ -184,36 +189,54 @@ namespace zero_mate::peripheral
         {
             // Send the start bit.
             case NState_Machine::Start_Bit:
+                m_logging_system.Info("NState_Machine::Start_Bit");
                 I2C_Send_Start_Bit();
                 break;
 
             // Send the slave's address.
             case NState_Machine::Address:
+                m_logging_system.Info("NState_Machine::Address");
                 I2C_Send_Slave_Address();
                 break;
 
             // Send the RW bit.
             case NState_Machine::RW:
+                m_logging_system.Info("NState_Machine::RW");
                 I2C_Send_RW_Bit();
                 break;
 
             // Receive the ACK_1 bit.
             case NState_Machine::ACK_1:
+                m_logging_system.Info("NState_Machine::ACK_1");
                 I2C_Receive_ACK_1();
                 break;
 
             // Send the data payload.
-            case NState_Machine::Data:
+            case NState_Machine::Send:
+                m_logging_system.Info("NState_Machine::Send");
                 I2C_Send_Data();
+                break;
+
+            // Send the data payload.
+            case NState_Machine::Recieve:
+                m_logging_system.Info("NState_Machine::Recieve");
+                I2C_Recieve_Data();
                 break;
 
             // Receive the ACK_2 bit.
             case NState_Machine::ACK_2:
+                m_logging_system.Info("NState_Machine::ACK_2");
                 I2C_Receive_ACK_2();
+                break;
+            
+            case NState_Machine::Send_ACK_2:
+                m_logging_system.Info("NState_Machine::ACK_2");
+                I2C_Send_ACK();
                 break;
 
             // Send the stop bit.
             case NState_Machine::Stop_Bit:
+                m_logging_system.Info("NState_Machine::Stop_Bit");
                 I2C_Send_Stop_Bit();
                 break;
         }
@@ -233,6 +256,8 @@ namespace zero_mate::peripheral
         // Get the current bit of the slave's address.
         --m_transaction.addr_idx;
         const auto curr_bit = static_cast<bool>((m_transaction.address >> m_transaction.addr_idx) & 0b1U);
+
+        m_logging_system.Info(("Adresa: " + std::to_string(m_transaction.address)).c_str());
 
         // Send the bit out to the target device.
         Set_GPIO_pin(SDA_Pin_Idx, curr_bit);
@@ -261,8 +286,17 @@ namespace zero_mate::peripheral
             m_logging_system.Error("Failed to receive ACK_1");
         }
 
+        m_logging_system.Info("Prijal jsem ACK_1");
+
         // Move on to sending the data payload itself.
-        m_transaction.state = NState_Machine::Data;
+        if (!m_transaction.read) {
+            m_transaction.state = NState_Machine::Send;
+            m_logging_system.Info("Nastavuju NState_Machine::Send");
+        }
+        else {
+            m_transaction.data_idx = 8;
+            m_transaction.state = NState_Machine::Recieve;
+        }
     }
 
     void CBSC::I2C_Send_Data()
@@ -283,6 +317,8 @@ namespace zero_mate::peripheral
         // Send out the current bit of the data payload.
         Set_GPIO_pin(SDA_Pin_Idx, curr_bit);
 
+        m_logging_system.Info(std::to_string(m_transaction.data_idx).c_str());
+
         // Have we sent all 8 bits already?
         if (m_transaction.data_idx == 0)
         {
@@ -292,15 +328,49 @@ namespace zero_mate::peripheral
                 m_fifo.pop();
             }
 
+            m_logging_system.Info("Nastavuju NState_Machine::ACK_2");
+
             // Move on to receiving the ACK_2 bit.
             m_transaction.state = NState_Machine::ACK_2;
+        }
+    }
+
+    void CBSC::I2C_Recieve_Data()
+    {
+        bool curr_bit{ false };
+        --m_transaction.data_idx;
+
+        // Read the current bit of the data payload.
+        curr_bit = Read_GPIO_pin(SDA_Pin_Idx);
+
+        if (curr_bit)
+        {
+            m_transaction.data |= (0b1U << (m_transaction.data_idx % 8));
+        }
+
+        m_logging_system.Info(("Prijal jsem bit: " + std::to_string(curr_bit)).c_str());
+
+        if (m_transaction.data_idx == 0)
+        {
+            m_logging_system.Info(("Prijal jsem: " + std::to_string(m_transaction.data)).c_str());
+            m_fifo.push(m_transaction.data);
+            m_transaction.data = { 0 };
+            if (m_transaction.length == 0) {
+                m_logging_system.Info("NState_Machine::Stop_Bit");
+                m_transaction.state = NState_Machine::Stop_Bit;
+            }
+            else {
+                //--m_transaction.length;
+                //m_transaction.data_idx = 8;
+                m_transaction.state = NState_Machine::Send_ACK_2;
+            }
         }
     }
 
     void CBSC::I2C_Receive_ACK_2()
     {
         // The slave device is supposed to pull the voltage low (= ACK_1).
-        if (m_gpio->Read_GPIO_Pin(SDA_Pin_Idx) != CGPIO_Manager::CPin::NState::Low)
+        if (m_gpio->Read_GPIO_Pin(SDA_Pin_Idx) != IGPIO_Manager::IPin::NState::Low)
         {
             // Report any errors.
             m_logging_system.Error("Failed to receive ACK_2");
@@ -309,16 +379,61 @@ namespace zero_mate::peripheral
         // We have finished sending out another byte of data.
         --m_transaction.length;
 
+        m_logging_system.Info(("Dostal jsem ACK2: " + std::to_string(m_transaction.length)).c_str());
+
         // Is there any other data in the FIFO to be sent to the device?
-        if (m_transaction.length != 0)
+        /*if (m_transaction.length != 0)
         {
+            m_logging_system.Info("Nastavuju NState_Machine::Send");
             // Move on to sending another byte of data.
-            m_transaction.state = NState_Machine::Data;
+            m_transaction.state = NState_Machine::Send;
             m_transaction.data_idx = Data_Length;
         }
-        else
+        else*/ 
+
+        if (!m_transaction.read)
         {
+            if (m_transaction.length != 0)
+            {
+                m_logging_system.Info("Nastavuju Send, PYCO");
+                // Move on to sending another byte of data.
+                m_transaction.state = NState_Machine::Send;
+                m_transaction.data_idx = Data_Length;
+                //m_transaction.state = NState_Machine::Stop_Bit;
+            }
+            else {
+                // Let us terminate the transaction.
+                m_logging_system.Info("Nastavuju NState_Machine::Stop_Bit");
+                m_transaction.state = NState_Machine::Stop_Bit;
+            }
+        }
+        else if (!m_transaction.request_sended) {
+            m_logging_system.Info("Nastavuju NState_Machine::Start_Bit");
+            m_transaction.state = NState_Machine::Start_Bit;
+            m_transaction.request_sended = true;
+        }
+        else {
+            m_logging_system.Info("Nastavuju NState_Machine::Recieve");
+            m_transaction.state = NState_Machine::Recieve;
+            m_transaction.request_sended = false;
+        }
+    }
+
+    void CBSC::I2C_Send_ACK() {
+        // Send an ACK bit.
+        Set_GPIO_pin(SDA_Pin_Idx, false);
+
+        if (m_transaction.length != 0)
+        {
+            m_logging_system.Info("Nastavuju Send, PYCO");
+            // Move on to sending another byte of data.
+            --m_transaction.length;
+            m_transaction.data_idx = Data_Length;
+            m_transaction.state = NState_Machine::Recieve;
+        }
+        else {
             // Let us terminate the transaction.
+            m_logging_system.Info("Nastavuju NState_Machine::Stop_Bit");
             m_transaction.state = NState_Machine::Stop_Bit;
         }
     }
@@ -391,22 +506,30 @@ namespace zero_mate::peripheral
     void CBSC::Set_GPIO_pin(std::uint8_t pin_idx, bool set)
     {
         // Set the state of the given pin.
-        const auto status = m_gpio->Set_Pin_State(pin_idx, static_cast<CGPIO_Manager::CPin::NState>(set));
+        const auto status = m_gpio->Set_Pin_State(pin_idx, static_cast<IGPIO_Manager::IPin::NState>(set));
 
         // Check for any possible errors.
         switch (status)
         {
-            case CGPIO_Manager::NPin_Set_Status::OK:
+            case IGPIO_Manager::IPin::NPin_Set_Status::OK:
                 break;
 
-            case CGPIO_Manager::NPin_Set_Status::Invalid_Pin_Function:
+            case IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Function:
                 m_logging_system.Error("Invalid function of pin");
                 break;
 
-            case CGPIO_Manager::NPin_Set_Status::Invalid_Pin_Number:
+            case IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Number:
                 m_logging_system.Error("Invalid pin number");
                 break;
         }
+    }
+
+    bool CBSC::Read_GPIO_pin(std::uint8_t pin_idx)
+    {
+        // Set the state of the given pin.
+        const auto status = m_gpio->Read_GPIO_Pin(pin_idx);
+
+        return status == IGPIO_Manager::IPin::NState::High;
     }
 
 } // namespace zero_mate::peripheral

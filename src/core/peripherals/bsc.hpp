@@ -15,11 +15,13 @@
 /// \cond
 #include <array>
 #include <queue>
+#include <string>
 /// \endcond
 
 // Project file imports
 
 #include "gpio.hpp"
+#include "ibsc.hpp"
 #include "peripheral.hpp"
 #include "system_clock_listener.hpp"
 #include "zero_mate/utils/logging_system.hpp"
@@ -30,7 +32,7 @@ namespace zero_mate::peripheral
     /// \class CBSC
     /// \brief This class represents the BSC peripheral used in BCM2835.
     // -----------------------------------------------------------------------------------------------------------------
-    class CBSC final : public IPeripheral, public ISystem_Clock_Listener
+    class CBSC final : public IBSC
     {
     public:
         /// I2C SDA (data) pin on the Raspberry Pi Zero board
@@ -97,7 +99,7 @@ namespace zero_mate::peripheral
         /// \brief Creates an instance of the class.
         /// \param gpio Reference to a GPIO manager (changing the state of GPIO pins)
         // -------------------------------------------------------------------------------------------------------------
-        explicit CBSC(std::shared_ptr<CGPIO_Manager> gpio);
+        explicit CBSC(std::shared_ptr<IGPIO_Manager> gpio) noexcept;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Resets/re-initializes the interrupt controller (IPeripheral interface).
@@ -143,8 +145,10 @@ namespace zero_mate::peripheral
             Address,   ///< Send slave's address
             RW,        ///< Are we going to read from the device or write to it?
             ACK_1,     ///< The slave device is supposed to send ACK_1
-            Data,      ///< Data payload
+            Send,      ///< Data payload
+            Recieve,   ///< Data payload
             ACK_2,     ///< The slave device is supposed to send ACK_2
+            Send_ACK_2,///< The slave device is supposed to send ACK_2
             Stop_Bit   ///< Stop bit (end of a transaction)
         };
 
@@ -157,9 +161,11 @@ namespace zero_mate::peripheral
             NState_Machine state{ NState_Machine::Start_Bit }; ///< Current state of the state machine
             std::uint32_t address{ 0x0 };                      ///< Slave address
             std::uint32_t length{ 0 };                         ///< Total number of bytes
+            std::uint8_t data{ 0 };                            ///< Total number of bytes
             std::uint8_t addr_idx{ Slave_Addr_Length };        ///< Index of the current bit of the slave's address
             std::uint8_t data_idx{ Data_Length };              ///< Index of the current bit of the current data payload
             bool read{ false };                                ///< Are we going to read from the device or write to it?
+            bool request_sended{ false };                      ///< Are we going to read from the device or write to it?
         };
 
         // -------------------------------------------------------------------------------------------------------------
@@ -177,84 +183,101 @@ namespace zero_mate::peripheral
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Adds data to the FIFO.
         // -------------------------------------------------------------------------------------------------------------
-        inline void Add_Data_To_FIFO();
+        void Add_Data_To_FIFO() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Performs actions after the control register has been written to.
         // -------------------------------------------------------------------------------------------------------------
-        inline void Control_Reg_Callback();
+        void Control_Reg_Callback() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Clears the FIFO.
         // -------------------------------------------------------------------------------------------------------------
-        inline void Clear_FIFO();
+        void Clear_FIFO() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Checks whether a new data transfer (transaction) should begin.
         /// \return true, if a new transaction should begin. false otherwise.
         // -------------------------------------------------------------------------------------------------------------
-        [[nodiscard]] inline bool Should_Transaction_Begin();
+        [[nodiscard]] bool Should_Transaction_Begin() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Checks whether the FIFO should be cleared or not.
         /// \return true, if the FIFO should be cleared. false otherwise.
         // -------------------------------------------------------------------------------------------------------------
-        [[nodiscard]] inline bool Should_FIFO_Be_Cleared();
+        [[nodiscard]] bool Should_FIFO_Be_Cleared() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Sets the state of a given GPIO pin.
         /// \param pin_idx Index of the GPIO pin whose state will be set
         /// \param set Should the state of the pin be set to high or low?
         // -------------------------------------------------------------------------------------------------------------
-        inline void Set_GPIO_pin(std::uint8_t pin_idx, bool set);
+        void Set_GPIO_pin(std::uint8_t pin_idx, bool set) override;
+
+        // -------------------------------------------------------------------------------------------------------------
+        /// \brief Sets the state of a given GPIO pin.
+        /// \param pin_idx Index of the GPIO pin whose state will be read
+        /// \return true, if the pin is in high state. false otherwise.
+        // -------------------------------------------------------------------------------------------------------------
+        bool Read_GPIO_pin(std::uint8_t pin_idx) override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Terminates an ongoing transaction (stop bit).
         // -------------------------------------------------------------------------------------------------------------
-        inline void Terminate_Transaction();
+        void Terminate_Transaction() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Updates the I2C state machine.
         // -------------------------------------------------------------------------------------------------------------
-        void I2C_Update();
+        void I2C_Update() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Sends a start bit (start of a frame).
         // -------------------------------------------------------------------------------------------------------------
-        inline void I2C_Send_Start_Bit();
+        void I2C_Send_Start_Bit() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Sends another bit of the slave's address.
         // -------------------------------------------------------------------------------------------------------------
-        inline void I2C_Send_Slave_Address();
+        void I2C_Send_Slave_Address() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Sends the RW bit.
         // -------------------------------------------------------------------------------------------------------------
-        inline void I2C_Send_RW_Bit();
+        void I2C_Send_RW_Bit() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Checks whether the slave device has sent ACK_1 as expected.
         // -------------------------------------------------------------------------------------------------------------
-        inline void I2C_Receive_ACK_1();
+        void I2C_Receive_ACK_1() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Sends another bit of the data payload.
         // -------------------------------------------------------------------------------------------------------------
-        inline void I2C_Send_Data();
+        void I2C_Send_Data() override;
+
+        // -------------------------------------------------------------------------------------------------------------
+        /// \brief Recieves another bit of the data payload.
+        // -------------------------------------------------------------------------------------------------------------
+        void I2C_Recieve_Data() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Checks whether the slave device has sent ACK_2 as expected.
         // -------------------------------------------------------------------------------------------------------------
-        inline void I2C_Receive_ACK_2();
+        void I2C_Receive_ACK_2() override;
+
+        // -------------------------------------------------------------------------------------------------------------
+        /// \brief Send bit back to the slave device.
+        // -------------------------------------------------------------------------------------------------------------
+        void I2C_Send_ACK() override;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Sends a stop bit (end of a frame).
         // -------------------------------------------------------------------------------------------------------------
-        inline void I2C_Send_Stop_Bit();
+        void I2C_Send_Stop_Bit() override;
 
     private:
-        std::shared_ptr<CGPIO_Manager> m_gpio;                 ///< GPIO manager
+        std::shared_ptr<IGPIO_Manager> m_gpio;                 ///< GPIO manager
         std::array<std::uint32_t, Number_Of_Registers> m_regs; ///< Peripheral's registers
         std::queue<std::uint8_t> m_fifo;                       ///< Data FIFO
         std::uint32_t m_cpu_cycles;                            ///< Number of passed CPU cycles

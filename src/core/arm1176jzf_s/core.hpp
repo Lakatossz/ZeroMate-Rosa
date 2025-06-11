@@ -43,7 +43,7 @@ namespace zero_mate::arm1176jzf_s
     /// \class CCPU_Core
     /// \brief Raspberry Pi Zero CPU core (arm1176jzf_s).
     // -----------------------------------------------------------------------------------------------------------------
-    class CCPU_Core final
+    class CCPU_Core final : public std::enable_shared_from_this<CCPU_Core>
     {
     public:
         /// Alias for a system clock listener (just to make the code less wordy)
@@ -184,6 +184,16 @@ namespace zero_mate::arm1176jzf_s
         /// \param instructions List of instructions (binary codes) to be executed by the CPU
         // -------------------------------------------------------------------------------------------------------------
         void Execute(std::initializer_list<isa::CInstruction> instructions);
+
+
+        // -------------------------------------------------------------------------------------------------------------
+        /// \brief Converts a given virtual address into a physical address using the MMU.
+        /// \param virtual_addr Virtual address to be converted into a physical address
+        /// \param write_access Indication of whether write or read access is intended to be performed
+        /// \return Physical address
+        // -------------------------------------------------------------------------------------------------------------
+        [[nodiscard]] std::uint32_t Convert_Virtual_Addr_To_Physical_Addr(std::uint32_t virtual_addr,
+            bool write_access);
 
     private:
         // -------------------------------------------------------------------------------------------------------------
@@ -526,15 +536,6 @@ namespace zero_mate::arm1176jzf_s
         // -------------------------------------------------------------------------------------------------------------
         template<typename Instruction>
         void Sign_Multiply_Accumulate_Word_Halfword(Instruction instruction);
-
-        // -------------------------------------------------------------------------------------------------------------
-        /// \brief Converts a given virtual address into a physical address using the MMU.
-        /// \param virtual_addr Virtual address to be converted into a physical address
-        /// \param write_access Indication of whether write or read access is intended to be performed
-        /// \return Physical address
-        // -------------------------------------------------------------------------------------------------------------
-        [[nodiscard]] std::uint32_t Convert_Virtual_Addr_To_Physical_Addr(std::uint32_t virtual_addr,
-                                                                          bool write_access);
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Calculates the base address of a data transfer instruction.

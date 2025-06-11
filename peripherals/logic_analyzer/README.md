@@ -17,7 +17,7 @@ const unsigned int val = ((hal::Default_Clock_Rate / static_cast<unsigned int>(r
   "peripherals": [
     {
       "name" : "Logic analyzer",
-      "pins" : [ 14, 15, 22, 27, 10, 4, 17, 16, 18, 23 ],
+      "connections" : [ 14, 15, 22, 27, 10, 4, 17, 16, 18, 23 ],
       "lib_dir" : "peripherals",
       "lib_name" : "logic_analyzer"
     }

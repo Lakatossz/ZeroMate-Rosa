@@ -29,6 +29,7 @@
 #include "soc.hpp"
 #include "zero_mate/utils/singleton.hpp"
 #include "../utils/logger/logger_stdo.hpp"
+#include "../utils/elf_loader.hpp"
 
 namespace zero_mate::soc
 {
@@ -124,7 +125,7 @@ namespace zero_mate::soc
         [[nodiscard]] bool Read_GPIO_Pin(std::uint32_t pin_idx)
         {
             // Use to the GPIO manager to retrieve the state of the given pin.
-            return g_gpio->Read_GPIO_Pin(pin_idx) == peripheral::CGPIO_Manager::CPin::NState::High;
+            return g_gpio->Read_GPIO_Pin(pin_idx) == peripheral::IGPIO_Manager::IPin::NState::High;
         }
 
         // -------------------------------------------------------------------------------------------------------------
@@ -135,12 +136,44 @@ namespace zero_mate::soc
         ///
         /// \param pin_idx Index of the GPIO pin whose state is going to be set
         /// \param set Sta to which the GPIO is going to be set
-        /// \return Returns status of the action (see peripheral::CGPIO_Manager::CPin::NState)
+        /// \return Returns status of the action (see peripheral::IGPIO_Manager::IPin::NState)
         // -------------------------------------------------------------------------------------------------------------
         [[nodiscard]] int Set_GPIO_Pin(std::uint32_t pin_idx, bool set)
         {
             const auto status =
-            g_gpio->Set_Pin_State(pin_idx, static_cast<peripheral::CGPIO_Manager::CPin::NState>(set));
+                g_gpio->Set_Pin_State(pin_idx, static_cast<peripheral::IGPIO_Manager::IPin::NState>(set));
+
+            uint32_t reset_pin = g_gpio->Get_Reset_Pin();
+
+            if (pin_idx == reset_pin && reset_pin > 0 && set) {
+
+                bool loading_kernel = true;
+
+                std::string path = "C:\\Users\\rosaj\\source\\repos\\KIV-RTOS\\sources\\build\\kernel.elf";
+
+                g_gpio->Reset();
+                g_ram = std::make_shared<peripheral::CRAM>(config::RAM_Size);
+                g_ic->Reset();
+                g_arm_timer->Reset();
+                g_monitor->Reset();
+                g_trng->Reset();
+                g_aux->Reset();
+                g_bsc_1->Reset();
+                g_bsc_2->Reset();
+                g_bsc_3->Reset();
+                g_cpu->Reset_Context();
+
+                const auto [error_code, pc, code] = utils::elf::Load_ELF(*g_bus, path.c_str(), loading_kernel);
+
+                if (error_code == utils::elf::NError_Code::OK) {
+                    if (loading_kernel)
+                    {
+                        g_cpu->Reset_Context();
+                        g_cpu->Set_PC(pc);
+                    }
+                }
+            }
+
             return static_cast<int>(status);
         }
 
@@ -260,7 +293,7 @@ namespace zero_mate::soc
             {
                 // clang-format off
                 g_logging_system.Error(fmt::format("Failed to parse the config file ({})",
-                                       config::External_Peripherals_Config_File).c_str());
+                    config::External_Peripherals_Config_File).c_str());
                 // clang-format on
 
                 // Return an empty JSON object.
@@ -282,12 +315,12 @@ namespace zero_mate::soc
                 !peripheral.contains(config::sections::Lib_Dir))
             {
                 g_logging_system.Error(fmt::format("At least one of the following sections is missing in the {} "
-                                                   "file: {}, {}, {}, or {}",
-                                                   config::sections::Name,
-                                                   config::sections::Connection,
-                                                   config::sections::Lib_Name,
-                                                   config::sections::Lib_Dir,
-                                                   config::External_Peripherals_Config_File).c_str());
+                    "file: {}, {}, {}, or {}",
+                    config::sections::Name,
+                    config::sections::Connection,
+                    config::sections::Lib_Name,
+                    config::sections::Lib_Dir,
+                    config::External_Peripherals_Config_File).c_str());
                 return false;
             }
             // clang-format on
@@ -312,6 +345,19 @@ namespace zero_mate::soc
             config.lib_dir = peripheral[config::sections::Lib_Dir].template get<std::string>();
 
             return config;
+        }
+
+        [[nodiscard]] inline uint32_t Get_Reset_Pin(const nlohmann::json& reset_pin)
+        {
+            if (reset_pin.is_array() && !reset_pin.empty())
+            {
+                const auto& obj = reset_pin[0];
+                if (obj.contains("connection") && obj["connection"].is_array() && !obj["connection"].empty())
+                {
+                    return obj["connection"][0].get<uint32_t>();
+                }
+            }
+            return 0;
         }
 
         // -------------------------------------------------------------------------------------------------------------
@@ -432,6 +478,8 @@ namespace zero_mate::soc
             // Retrieve the peripherals.
             const auto peripherals = data["peripherals"];
 
+            const auto reset_pin = data["reset_pin"];
+
             for (const auto& peripheral : peripherals)
             {
                 // Make sure all sections are present (otherwise skip this peripheral).
@@ -456,6 +504,11 @@ namespace zero_mate::soc
 
                 // Create the peripheral.
                 Create_External_Peripheral(config);
+            }
+
+            const uint32_t reset_pin_idx = Get_Reset_Pin(reset_pin);
+            if (reset_pin_idx < 32) {
+                g_gpio->Enable_HW_Reset_Listening(reset_pin_idx);
             }
         }
     }

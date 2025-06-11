@@ -22,25 +22,12 @@
 // Project file imports
 
 #include "gpio.hpp"
+#include "igpio.hpp"
 #include "zero_mate/utils/math.hpp"
 #include "zero_mate/utils/singleton.hpp"
 
 namespace zero_mate::peripheral
 {
-    // clang-format off
-    const std::unordered_set<CGPIO_Manager::NRegister> CGPIO_Manager::s_read_only_registers = {
-        CGPIO_Manager::NRegister::GPLEV0,
-        CGPIO_Manager::NRegister::GPLEV1
-    };
-
-    const std::unordered_set<CGPIO_Manager::NRegister> CGPIO_Manager::s_write_only_registers = {
-        CGPIO_Manager::NRegister::GPSET0,
-        CGPIO_Manager::NRegister::GPSET1,
-        CGPIO_Manager::NRegister::GPCLR0,
-        CGPIO_Manager::NRegister::GPCLR1
-    };
-    // clang-format on
-
     CGPIO_Manager::CPin::CPin()
     : m_state{ NState::Low }
     , m_function{ NFunction::Input }
@@ -49,7 +36,7 @@ namespace zero_mate::peripheral
     {
     }
 
-    CGPIO_Manager::CPin::NFunction CGPIO_Manager::CPin::Get_Function() const noexcept
+    IGPIO_Manager::IPin::NFunction CGPIO_Manager::CPin::Get_Function() const noexcept
     {
         return m_function;
     }
@@ -59,7 +46,7 @@ namespace zero_mate::peripheral
         m_function = function;
     }
 
-    CGPIO_Manager::CPin::NState CGPIO_Manager::CPin::Get_State() const noexcept
+    IGPIO_Manager::IPin::NState CGPIO_Manager::CPin::Get_State() const noexcept
     {
         return m_state;
     }
@@ -79,17 +66,17 @@ namespace zero_mate::peripheral
         m_pending_irq = set;
     }
 
-    void CGPIO_Manager::CPin::Enable_Interrupt_Type(NInterrupt_Type type)
+    void CGPIO_Manager::CPin::Enable_Interrupt_Type(IGPIO_Manager::IPin::NInterrupt_Type type)
     {
         m_enabled_interrupts[static_cast<std::size_t>(type)] = true;
     }
 
-    void CGPIO_Manager::CPin::Disable_Interrupt_Type(NInterrupt_Type type)
+    void CGPIO_Manager::CPin::Disable_Interrupt_Type(IGPIO_Manager::IPin::NInterrupt_Type type)
     {
         m_enabled_interrupts[static_cast<std::size_t>(type)] = false;
     }
 
-    bool CGPIO_Manager::CPin::Is_Interrupt_Enabled(NInterrupt_Type type) const
+    bool CGPIO_Manager::CPin::Is_Interrupt_Enabled(IGPIO_Manager::IPin::NInterrupt_Type type) const
     {
         return m_enabled_interrupts[static_cast<std::size_t>(type)];
     }
@@ -97,27 +84,27 @@ namespace zero_mate::peripheral
     bool CGPIO_Manager::CPin::Is_Interrupt_Detected(NState new_state) const noexcept
     {
         // Rising edge
-        if (Is_Interrupt_Enabled(CPin::NInterrupt_Type::Rising_Edge) && Get_State() == CPin::NState::Low &&
+        if (Is_Interrupt_Enabled(IGPIO_Manager::IPin::NInterrupt_Type::Rising_Edge) && Get_State() == CPin::NState::Low &&
             new_state == CPin::NState::High)
         {
             return true;
         }
 
         // Falling edge
-        if (Is_Interrupt_Enabled(CPin::NInterrupt_Type::Falling_Edge) && Get_State() == CPin::NState::High &&
+        if (Is_Interrupt_Enabled(IGPIO_Manager::IPin::NInterrupt_Type::Falling_Edge) && Get_State() == CPin::NState::High &&
             new_state == CPin::NState::Low)
         {
             return true;
         }
 
         // Low state
-        if (Is_Interrupt_Enabled(CPin::NInterrupt_Type::Low) && new_state == NState::Low)
+        if (Is_Interrupt_Enabled(IGPIO_Manager::IPin::NInterrupt_Type::Low) && new_state == NState::Low)
         {
             return true;
         }
 
         // High state
-        if (Is_Interrupt_Enabled(CPin::NInterrupt_Type::High) && new_state == NState::High)
+        if (Is_Interrupt_Enabled(IGPIO_Manager::IPin::NInterrupt_Type::High) && new_state == NState::High)
         {
             return true;
         }
@@ -126,8 +113,8 @@ namespace zero_mate::peripheral
     }
 
     CGPIO_Manager::CGPIO_Manager(std::shared_ptr<CInterrupt_Controller> interrupt_controller) noexcept
-    : m_logging_system{ *utils::CSingleton<utils::CLogging_System>::Get_Instance() }
-    , m_interrupt_controller{ interrupt_controller }
+        : m_interrupt_controller{ interrupt_controller }
+        , m_logging_system{ *utils::CSingleton<utils::CLogging_System>::Get_Instance() }
     {
         Reset();
     }
@@ -230,7 +217,7 @@ namespace zero_mate::peripheral
 
     void CGPIO_Manager::Notify_External_Peripherals(std::uint32_t pin_idx)
     {
-        std::for_each(m_external_peripherals.begin(), m_external_peripherals.end(), [pin_idx](const auto& peripheral) {
+        std::for_each(m_external_peripherals.begin(), m_external_peripherals.end(), [pin_idx, this](const auto& peripheral) {
             const auto subscription = peripheral->Get_GPIO_Subscription();
 
             if (subscription.contains(pin_idx))
@@ -240,7 +227,7 @@ namespace zero_mate::peripheral
         });
     }
 
-    std::size_t CGPIO_Manager::Get_Register_Index(std::size_t& pin_idx, NRegister reg_0, NRegister reg_1) noexcept
+    std::size_t CGPIO_Manager::Get_Register_Index(std::size_t& pin_idx, IGPIO_Manager::IPin::NRegister reg_0, IGPIO_Manager::IPin::NRegister reg_1) noexcept
     {
         if (pin_idx >= Number_Of_Pins_In_Reg)
         {
@@ -255,7 +242,7 @@ namespace zero_mate::peripheral
 
     void CGPIO_Manager::Mirror_Pin_State_In_GPLEVn(std::size_t pin_idx, CPin::NState state)
     {
-        const auto reg_index = Get_Register_Index(pin_idx, NRegister::GPLEV0, NRegister::GPLEV1);
+        const auto reg_index = Get_Register_Index(pin_idx, IGPIO_Manager::IPin::NRegister::GPLEV0, IGPIO_Manager::IPin::NRegister::GPLEV1);
         auto& GPLEVn_reg = m_regs[reg_index];
 
         if (state == CPin::NState::High)
@@ -270,7 +257,7 @@ namespace zero_mate::peripheral
         }
     }
 
-    void CGPIO_Manager::Set_Interrupt(std::size_t reg_idx, bool last_reg, CPin::NInterrupt_Type type)
+    void CGPIO_Manager::Set_Interrupt(std::size_t reg_idx, bool last_reg, IGPIO_Manager::IPin::NInterrupt_Type type)
     {
         // Calculate the index of the last bit as there is only 54 GPIO pins.
         const std::uint32_t last_bit_idx =
@@ -314,10 +301,10 @@ namespace zero_mate::peripheral
     void CGPIO_Manager::Write(std::uint32_t addr, const char* data, std::uint32_t size)
     {
         const std::size_t reg_idx = addr / Reg_Size;
-        const auto reg_type = static_cast<NRegister>(reg_idx);
+        const auto reg_type = static_cast<IGPIO_Manager::IPin::NRegister>(reg_idx);
 
         // Make sure we are not writing to a read-only register.
-        if (s_read_only_registers.contains(reg_type))
+        if (IGPIO_Manager::IPin::s_read_only_registers.contains(reg_type))
         {
             // clang-format off
             m_logging_system.Warning(fmt::format("The GPIO {} register is read-only",
@@ -337,87 +324,87 @@ namespace zero_mate::peripheral
         switch (reg_type)
         {
             // Function select register
-            case NRegister::GPFSEL0:
+            case IGPIO_Manager::IPin::NRegister::GPFSEL0:
                 [[fallthrough]];
-            case NRegister::GPFSEL1:
-            case NRegister::GPFSEL2:
-            case NRegister::GPFSEL3:
-            case NRegister::GPFSEL4:
-            case NRegister::GPFSEL5:
-                Update_Pin_Function(reg_idx, reg_type == NRegister::GPFSEL5);
+            case IGPIO_Manager::IPin::NRegister::GPFSEL1:
+            case IGPIO_Manager::IPin::NRegister::GPFSEL2:
+            case IGPIO_Manager::IPin::NRegister::GPFSEL3:
+            case IGPIO_Manager::IPin::NRegister::GPFSEL4:
+            case IGPIO_Manager::IPin::NRegister::GPFSEL5:
+                Update_Pin_Function(reg_idx, reg_type == IGPIO_Manager::IPin::NRegister::GPFSEL5);
                 break;
 
             // Set register
-            case NRegister::GPSET0:
+            case IGPIO_Manager::IPin::NRegister::GPSET0:
                 [[fallthrough]];
-            case NRegister::GPSET1:
-                Update_Pin_State(reg_idx, CPin::NState::High, reg_type == NRegister::GPSET1);
+            case IGPIO_Manager::IPin::NRegister::GPSET1:
+                Update_Pin_State(reg_idx, IPin::NState::High, reg_type == IGPIO_Manager::IPin::NRegister::GPSET1);
                 break;
 
             // Clear register
-            case NRegister::GPCLR0:
+            case IGPIO_Manager::IPin::NRegister::GPCLR0:
                 [[fallthrough]];
-            case NRegister::GPCLR1:
-                Update_Pin_State(reg_idx, CPin::NState::Low, reg_type == NRegister::GPCLR1);
+            case IGPIO_Manager::IPin::NRegister::GPCLR1:
+                Update_Pin_State(reg_idx, IPin::NState::Low, reg_type == IGPIO_Manager::IPin::NRegister::GPCLR1);
                 break;
 
             // These registers reflect the actual state of each pin,
             // The corresponding bits are set/cleared whenever a pin changes its state,
-            case NRegister::GPLEV0:
+            case IGPIO_Manager::IPin::NRegister::GPLEV0:
                 [[fallthrough]];
-            case NRegister::GPLEV1:
+            case IGPIO_Manager::IPin::NRegister::GPLEV1:
                 break;
 
             // Clear pending IRQ
             // TODO write a 1 to it whenever an interrupt occurs, so we can distinguish what pin has generated it?
-            case NRegister::GPEDS0:
+            case IGPIO_Manager::IPin::NRegister::GPEDS0:
                 [[fallthrough]];
-            case NRegister::GPEDS1:
-                Clear_IRQ(reg_idx, reg_type == NRegister::GPEDS1);
+            case IGPIO_Manager::IPin::NRegister::GPEDS1:
+                Clear_IRQ(reg_idx, reg_type == IGPIO_Manager::IPin::NRegister::GPEDS1);
                 break;
 
             // Enable/disable rising edge (interrupt)
-            case NRegister::GPREN0:
+            case IGPIO_Manager::IPin::NRegister::GPREN0:
                 [[fallthrough]];
-            case NRegister::GPREN1:
-                Set_Interrupt(reg_idx, reg_type == NRegister::GPREN1, CPin::NInterrupt_Type::Rising_Edge);
+            case IGPIO_Manager::IPin::NRegister::GPREN1:
+                Set_Interrupt(reg_idx, reg_type == IGPIO_Manager::IPin::NRegister::GPREN1, IGPIO_Manager::IPin::NInterrupt_Type::Rising_Edge);
                 break;
 
             // Enable/disable falling edge (interrupt)
-            case NRegister::GPHEN0:
+            case IGPIO_Manager::IPin::NRegister::GPHEN0:
                 [[fallthrough]];
-            case NRegister::GPHEN1:
-                Set_Interrupt(reg_idx, reg_type == NRegister::GPHEN1, CPin::NInterrupt_Type::High);
+            case IGPIO_Manager::IPin::NRegister::GPHEN1:
+                Set_Interrupt(reg_idx, reg_type == IGPIO_Manager::IPin::NRegister::GPHEN1, IGPIO_Manager::IPin::NInterrupt_Type::High);
                 break;
 
             // Enable/disable low state (interrupt)
-            case NRegister::GPLEN0:
+            case IGPIO_Manager::IPin::NRegister::GPLEN0:
                 [[fallthrough]];
-            case NRegister::GPLEN1:
-                Set_Interrupt(reg_idx, reg_type == NRegister::GPLEN1, CPin::NInterrupt_Type::Low);
+            case IGPIO_Manager::IPin::NRegister::GPLEN1:
+                Set_Interrupt(reg_idx, reg_type == IGPIO_Manager::IPin::NRegister::GPLEN1, IGPIO_Manager::IPin::NInterrupt_Type::Low);
                 break;
 
             // Enable/disable high state (interrupt)
-            case NRegister::GPFEN0:
+            case IGPIO_Manager::IPin::NRegister::GPFEN0:
                 [[fallthrough]];
-            case NRegister::GPFEN1:
-                Set_Interrupt(reg_idx, reg_type == NRegister::GPFEN1, CPin::NInterrupt_Type::Falling_Edge);
+            case IGPIO_Manager::IPin::NRegister::GPFEN1:
+                Set_Interrupt(reg_idx, reg_type == IGPIO_Manager::IPin::NRegister::GPFEN1, IGPIO_Manager::IPin::NInterrupt_Type::Falling_Edge);
                 break;
 
             // Reserved unused registers
-            case NRegister::Reserved_01:
+            case IGPIO_Manager::IPin::NRegister::Reserved_01:
                 [[fallthrough]];
-            case NRegister::Reserved_02:
-            case NRegister::Reserved_03:
-            case NRegister::Reserved_04:
-            case NRegister::Reserved_05:
-            case NRegister::Reserved_06:
-            case NRegister::Reserved_07:
-            case NRegister::Reserved_08:
-            case NRegister::Reserved_09:
-            case NRegister::Reserved_10:
-            case NRegister::Reserved_11:
-            case NRegister::Reserved_12:
+            case IGPIO_Manager::IPin::NRegister::Reserved_02:
+            case IGPIO_Manager::IPin::NRegister::Reserved_03:
+            case IGPIO_Manager::IPin::NRegister::Reserved_04:
+            case IGPIO_Manager::IPin::NRegister::Reserved_05:
+            case IGPIO_Manager::IPin::NRegister::Reserved_06:
+            case IGPIO_Manager::IPin::NRegister::Reserved_07:
+            case IGPIO_Manager::IPin::NRegister::Reserved_08:
+            case IGPIO_Manager::IPin::NRegister::Reserved_09:
+            case IGPIO_Manager::IPin::NRegister::Reserved_10:
+            case IGPIO_Manager::IPin::NRegister::Reserved_11:
+            case IGPIO_Manager::IPin::NRegister::Reserved_12:
                 break;
 
             default:
@@ -434,10 +421,10 @@ namespace zero_mate::peripheral
     void CGPIO_Manager::Read(std::uint32_t addr, char* data, std::uint32_t size)
     {
         const std::size_t reg_idx = addr / Reg_Size;
-        const auto reg_type = static_cast<NRegister>(reg_idx);
+        const auto reg_type = static_cast<IGPIO_Manager::IPin::NRegister>(reg_idx);
 
         // Make sure we are not reading from a write-only register.
-        if (s_write_only_registers.contains(reg_type))
+        if (IGPIO_Manager::IPin::s_write_only_registers.contains(reg_type))
         {
             // clang-format off
             m_logging_system.Warning(fmt::format("The GPIO {} register is write-only",
@@ -456,31 +443,31 @@ namespace zero_mate::peripheral
         return m_pins.at(idx);
     }
 
-    CGPIO_Manager::CPin::NState CGPIO_Manager::Read_GPIO_Pin(std::size_t idx) const
+    CGPIO_Manager::IPin::NState CGPIO_Manager::Read_GPIO_Pin(std::size_t idx) const
     {
         return m_pins.at(idx).Get_State();
     }
 
-    CGPIO_Manager::NPin_Set_Status CGPIO_Manager::Set_Pin_State(std::size_t pin_idx, CPin::NState state)
+    IGPIO_Manager::IPin::NPin_Set_Status CGPIO_Manager::Set_Pin_State(std::size_t pin_idx, IPin::NState state)
     {
         // Make sure pin_idx is valid.
         if (pin_idx >= Number_of_GPIO_Pins)
         {
-            return NPin_Set_Status::Invalid_Pin_Number;
+            return IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Number;
         }
 
         // Get the pin by its index.
         auto& pin = m_pins[pin_idx];
 
-        const CPin::NFunction pin_function = pin.Get_Function();
+        const IPin::NFunction pin_function = pin.Get_Function();
 
         // Make sure the pin function has been set to input.
         // clang-format off
-        if ((pin_function != CPin::NFunction::Input) &&
-            (pin_function != CPin::NFunction::Alt_5) &&
-            (pin_function != CPin::NFunction::Alt_0))
+        if ((pin_function != IPin::NFunction::Input) &&
+            (pin_function != IPin::NFunction::Alt_5) &&
+            (pin_function != IPin::NFunction::Alt_0))
         {
-            return NPin_Set_Status::Invalid_Pin_Function;
+            return IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Function;
         }
         // clang-format on
 
@@ -510,18 +497,39 @@ namespace zero_mate::peripheral
             m_interrupt_controller->Signalize_IRQ(irq_source);
         }
 
-        return NPin_Set_Status::OK;
+        return IGPIO_Manager::IPin::NPin_Set_Status::OK;
+    }
+
+    void CGPIO_Manager::Enable_HW_Reset_Listening(uint32_t pin_idx)
+    {
+        m_reset_pin = pin_idx;
+        m_logging_system.Debug(fmt::format("Interrupt {} has been enabled on pin {}",
+            magic_enum::enum_name(IGPIO_Manager::IPin::NInterrupt_Type::Rising_Edge), pin_idx).c_str());
+        m_pins[pin_idx].Enable_Interrupt_Type(IGPIO_Manager::IPin::NInterrupt_Type::Rising_Edge);
+    }
+
+    void CGPIO_Manager::Disable_HW_Reset_Listening(uint32_t pin_idx)
+    {
+        m_reset_pin = 0;
+        m_logging_system.Debug(fmt::format("Interrupt {} has been disabled on pin {}",
+            magic_enum::enum_name(IGPIO_Manager::IPin::NInterrupt_Type::Rising_Edge), pin_idx).c_str());
+        m_pins[pin_idx].Enable_Interrupt_Type(IGPIO_Manager::IPin::NInterrupt_Type::Rising_Edge);
+    }
+
+    uint32_t CGPIO_Manager::Get_Reset_Pin()
+    {
+        return m_reset_pin;
     }
 
     void CGPIO_Manager::Update_GPEDS(std::size_t pin_idx)
     {
         // Assume the pin index comes from the first set of indexes.
-        auto reg_idx = static_cast<std::uint32_t>(NRegister::GPEDS0);
+        auto reg_idx = static_cast<std::uint32_t>(IGPIO_Manager::IPin::NRegister::GPEDS0);
 
         // Check if GPEDS1 should be used (pin_idx >= 32)
         if (pin_idx >= Number_Of_Pins_In_Reg)
         {
-            reg_idx = static_cast<std::uint32_t>(NRegister::GPEDS1);
+            reg_idx = static_cast<std::uint32_t>(IGPIO_Manager::IPin::NRegister::GPEDS1);
             pin_idx -= Number_Of_Pins_In_Reg;
         }
 

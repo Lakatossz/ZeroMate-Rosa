@@ -29,6 +29,8 @@ target_sources(zero_mate
         ${gui_source_files}
 )
 
+add_subdirectory(mock)
+
 # Add system headers, so the build passes all compiler warnings
 target_include_directories(zero_mate
     SYSTEM PRIVATE

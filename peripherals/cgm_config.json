@@ -1,0 +1,8 @@
+{
+          "configuration": [
+            {
+              "invalid_parameter": [ "C:\\Users\\rosaj\\Source\\Repos\\ZeroMate\\peripherals\\cgm\\src\\patient\\simple-patient.dll" ],
+              "error_chance": [ 0 ]
+            }
+          ]
+        }
