@@ -297,8 +297,6 @@ private:
 	NCMD m_curr_cmd;                                            ///< Current command being processed
 	bool m_lock_incoming_data;                                  ///< Should not the next data
 
-	uint32_t m_burn_cycles = 0;
-
 	zero_mate::utils::CLogging_System* m_logging_system;        ///< Logging system
 
 	float m_full_capacity;

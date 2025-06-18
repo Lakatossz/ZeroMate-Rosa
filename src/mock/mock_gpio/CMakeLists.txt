@@ -4,7 +4,7 @@ include_guard()
 cmake_minimum_required(VERSION 3.21)
 
 # Add the mock_GPIO as a shared library
-add_library(mock_gpio SHARED)
+add_library(mock_gpio STATIC)
 
 # Define the ZM_EXTERNAL_PERIPHERAL_EXPORT macro
 target_compile_definitions(mock_gpio

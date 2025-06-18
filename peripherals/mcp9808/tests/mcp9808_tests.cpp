@@ -29,12 +29,12 @@ public:
         current_instance = this; // Správné nastavení instance pro pøístup k èlenským funkcím
     }
 
-    float Read() {
+    float Read(std::uint32_t address) {
         char buffer[32] = {};
 
         char s;
 
-        std::uint32_t read_address = m_address | 1;
+        std::uint32_t read_address = address | 1;
 
         // Nastaveni I2C adresy senzoru v BSC
         m_bsc->Write(static_cast<uint32_t>(peripheral::IBSC::NRegister::Slave_Address),
@@ -81,7 +81,7 @@ public:
         return value;
     }
 
-    void Write(std::uint32_t command) {
+    void Write(std::uint32_t command, std::uint32_t address) {
         char s;
         uint32_t control_reg_value = (1 << 4);
         char* data_to_write = reinterpret_cast<char*>(&control_reg_value);
@@ -92,7 +92,7 @@ public:
 
         // Nastavení I2C adresy senzoru v BSC
         m_bsc->Write(static_cast<uint32_t>(peripheral::IBSC::NRegister::Slave_Address),
-            reinterpret_cast<const char*>(&m_address), sizeof(uint32_t));
+            reinterpret_cast<const char*>(&address), sizeof(uint32_t));
 
         // Nastaveni delky dat, ktere budu zapisovat
         std::uint32_t size = 2;
@@ -184,8 +184,14 @@ protected:
     std::shared_ptr<zero_mate::peripheral::CGPIO_Manager_Mock> m_gpio;
     std::unique_ptr<peripheral::Mock_BSC> m_bsc;
     std::unique_ptr<CMcp9808> m_sensor;
+    std::unique_ptr<CMcp9808> m_sensor_1;
+    std::unique_ptr<CMcp9808> m_sensor_2;
+    std::unique_ptr<CMcp9808> m_sensor_3;
     utils::CLogging_System* m_logging_system;
     std::uint32_t m_address = 0x48;
+    std::uint32_t m_address_1 = 0x4A;
+    std::uint32_t m_address_2 = 0x4C;
+    std::uint32_t m_address_3 = 0x4E;
     std::uint32_t m_sda_pin = 2;
     std::uint32_t m_scl_pin = 3;
 };
@@ -262,11 +268,11 @@ TEST_F(Test_MCP9808, Read_Temperature_Once) {
 
     if (m_sensor != nullptr && m_gpio != nullptr && m_bsc != nullptr) {
         m_gpio->Add_External_Peripheral(m_sensor.get());
-        Write(0x81);
+        Write(0x81, m_address);
 
         const float target = GetTarget(config_string, "referenced_value");
         const float epsilon = 0.01;
-        correct = std::abs(Read() - target) < epsilon;
+        correct = std::abs(Read(m_address) - target) < epsilon;
     }
     else {
         correct = false;
@@ -314,8 +320,8 @@ TEST_F(Test_MCP9808, Read_Temperature_Many_Times) {
         const float epsilon = 0.01;
 
         for (int i = 0; i < 10; ++i) {
-            Write(0x81);
-            correct = std::abs(Read() - target) < epsilon;
+            Write(0x81, m_address);
+            correct = std::abs(Read(m_address) - target) < epsilon;
         }
     }
     else {
@@ -360,11 +366,11 @@ TEST_F(Test_MCP9808, Read_Higher_Temperature_Once) {
     if (m_sensor != nullptr && m_gpio != nullptr && m_bsc != nullptr) {
         m_gpio->Add_External_Peripheral(m_sensor.get());
 
-        Write(0x81);
+        Write(0x81, m_address);
 
         const float target = GetTarget(config_string, "higher_value");
         const float epsilon = 0.01;
-        correct = std::abs(Read() - target) < epsilon;
+        correct = std::abs(Read(m_address) - target) < epsilon;
     }
     else {
         correct = false;
@@ -408,11 +414,104 @@ TEST_F(Test_MCP9808, Read_Lower_Temperature_Once) {
     if (m_sensor != nullptr && m_gpio != nullptr && m_bsc != nullptr) {
         m_gpio->Add_External_Peripheral(m_sensor.get());
 
-        Write(0x81);
+        Write(0x81, m_address);
         const float target = GetTarget(config_string, "lower_value");
 
         const float epsilon = 0.01;
-        correct = std::abs(Read()- target) < epsilon;
+        correct = std::abs(Read(m_address)- target) < epsilon;
+    }
+    else {
+        correct = false;
+    }
+
+    EXPECT_TRUE(correct);
+}
+
+TEST_F(Test_MCP9808, Read_Temperature_Once_With_Other_I2C_Devices) {
+    bool correct = true;
+
+    std::string config_string = R"({
+      "configuration": [
+        {
+          "referenced_value": [ 21 ],
+          "higher_value": [ 150 ],
+          "lower_value": [ 1 ],
+          "start_with": [ 0 ]
+        }
+      ]
+    })";
+
+    std::ofstream("peripherals/mcp9808_config.json") << config_string;
+
+    try {
+        // Vytvoøení instance senzoru (I2C slave)
+        m_sensor = std::make_unique<CMcp9808>(
+            "TestSensor",
+            m_address,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_sensor_1 = std::make_unique<CMcp9808>(
+            "TestSensor1",
+            m_address_1,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_sensor_2 = std::make_unique<CMcp9808>(
+            "TestSensor2",
+            m_address_2,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_sensor_3 = std::make_unique<CMcp9808>(
+            "TestSensor3",
+            m_address_3,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+    }
+    catch (const std::exception& e) {
+        correct = false;
+    }
+
+    if (m_sensor != nullptr && m_gpio != nullptr && m_bsc != nullptr) {
+        m_gpio->Add_External_Peripheral(m_sensor.get());
+        m_gpio->Add_External_Peripheral(m_sensor_1.get());
+        m_gpio->Add_External_Peripheral(m_sensor_2.get());
+        m_gpio->Add_External_Peripheral(m_sensor_3.get());
+
+        const float target = GetTarget(config_string, "referenced_value");
+        const float epsilon = 0.01;
+
+        Write(0x81, m_address);
+        correct = std::abs(Read(m_address) - target) < epsilon;
+
+        Write(0x81, m_address_1);
+        correct = std::abs(Read(m_address_1) - target) < epsilon;
+
+        Write(0x81, m_address_2);
+        correct = std::abs(Read(m_address_2) - target) < epsilon;
+
+        Write(0x81, m_address_3);
+        correct = std::abs(Read(m_address_3) - target) < epsilon;
+
+        Write(0x81, m_address);
+        std::cout << "teplota: " << Read(m_address) << std::endl;
     }
     else {
         correct = false;

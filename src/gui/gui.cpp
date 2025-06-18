@@ -106,7 +106,7 @@ namespace zero_mate::gui
                                                                      s_scroll_to_curr_line,
                                                                      s_kernel_has_been_loaded,
                                                                      s_cpu_running,
-                                                                     s_kernel_filename));
+                                                                     soc::g_kernel_path));
 
             // Source code window
             // clang-format off
@@ -123,7 +123,7 @@ namespace zero_mate::gui
                                                                    s_kernel_has_been_loaded,
                                                                    soc::g_peripherals,
                                                                    s_cpu_running,
-                                                                   s_kernel_filename));
+                                                                   soc::g_kernel_path));
         }
 
         // -------------------------------------------------------------------------------------------------------------

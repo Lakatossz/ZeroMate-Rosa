@@ -21,23 +21,13 @@
 
 #include "../../core/peripherals/ibsc.hpp"
 
-#ifdef _WIN32
-    #ifdef ZM_MOCK_BSC_EXPORT
-        #define ZM_MOCK_BSC_API __declspec(dllexport)
-    #else
-        #define ZM_MOCK_BSC_API __declspec(dllimport)
-    #endif
-    #else
-        #define ZM_MOCK_BSC_API
-#endif
-
 namespace zero_mate::peripheral
 {
     // -----------------------------------------------------------------------------------------------------------------
     /// \class CBSC
     /// \brief This class represents the BSC peripheral used in BCM2835.
     // -----------------------------------------------------------------------------------------------------------------
-    class ZM_MOCK_BSC_API Mock_BSC final : public IBSC
+    class Mock_BSC final : public IBSC
     {
     public:
         /// I2C SDA (data) pin on the Raspberry Pi Zero board

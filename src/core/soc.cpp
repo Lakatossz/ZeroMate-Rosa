@@ -84,6 +84,9 @@ namespace zero_mate::soc
     // BSC 3
     std::shared_ptr<peripheral::CBSC> g_bsc_3 = std::make_shared<peripheral::CBSC>(g_gpio);
 
+    //"C:\\Users\\rosaj\\source\\repos\\KIV-RTOS\\sources\\build\\kernel.elf"
+    std::shared_ptr<std::string> g_kernel_path = std::make_shared<std::string>("C:\\Users\\rosaj\\source\\repos\\KIV-RTOS\\sources\\build\\kernel.elf");
+
     // Initialize the collection of all internal peripherals as well as a collection of all external
     // peripherals that are connected to the board via GPIO.
     std::vector<std::shared_ptr<peripheral::IPeripheral>> g_peripherals{};
@@ -149,7 +152,7 @@ namespace zero_mate::soc
 
                 bool loading_kernel = true;
 
-                std::string path = "C:\\Users\\rosaj\\source\\repos\\KIV-RTOS\\sources\\build\\kernel.elf";
+                //std::string path = "C:\\Users\\rosaj\\source\\repos\\KIV-RTOS\\sources\\build\\kernel.elf";
 
                 g_gpio->Reset();
                 g_ram = std::make_shared<peripheral::CRAM>(config::RAM_Size);
@@ -163,13 +166,69 @@ namespace zero_mate::soc
                 g_bsc_3->Reset();
                 g_cpu->Reset_Context();
 
-                const auto [error_code, pc, code] = utils::elf::Load_ELF(*g_bus, path.c_str(), loading_kernel);
+                std::cout << "Cesta ke kernelu je: " << g_kernel_path->c_str() << std::endl;
+
+                const auto [error_code, pc, code] = utils::elf::Load_ELF(*g_bus, g_kernel_path->c_str(), loading_kernel);
 
                 if (error_code == utils::elf::NError_Code::OK) {
                     if (loading_kernel)
                     {
                         g_cpu->Reset_Context();
-                        g_cpu->Set_PC(pc);
+                        g_cpu->Set_PC(0x8000);
+                    }
+                }
+            }
+
+            return static_cast<int>(status);
+        }
+
+        [[nodiscard]] int Set_GPIO_Pin_Without_Notify(std::uint32_t pin_idx, bool set)
+        {
+            const auto status =
+                g_gpio->Set_Pin_State_Without_Notify(pin_idx, static_cast<peripheral::IGPIO_Manager::IPin::NState>(set));
+
+            uint32_t reset_pin = g_gpio->Get_Reset_Pin();
+
+            if (pin_idx == reset_pin && reset_pin > 0 && set) {
+
+                bool loading_kernel = true;
+
+                //std::string path = "C:\\Users\\rosaj\\source\\repos\\KIV-RTOS\\sources\\build\\kernel.elf";
+
+                // clang-format off
+                std::for_each(g_peripherals.begin(),
+                    g_peripherals.end(),
+                    [](auto& peripheral) -> void {
+                        peripheral->Reset();
+                    });
+                // clang-format on
+
+                g_gpio->Reset();
+                g_ram = std::make_shared<peripheral::CRAM>(config::RAM_Size);
+                //g_bus->Reset();
+                g_ic->Reset();
+                g_arm_timer->Reset();
+                g_monitor->Reset();
+                g_trng->Reset();
+                g_aux->Reset();
+                g_bsc_1->Reset();
+                g_bsc_2->Reset();
+                g_bsc_3->Reset();
+                g_cp15->Reset();
+                g_cp10->Reset();
+                g_mmu->Reset();
+                g_ic->Reset();
+                g_cpu->Reset_Context();
+
+                std::cout << "Cesta ke kernelu je: " << g_kernel_path->c_str() << std::endl;
+
+                const auto [error_code, pc, code] = utils::elf::Load_ELF(*g_bus, g_kernel_path->c_str(), loading_kernel);
+
+                if (error_code == utils::elf::NError_Code::OK) {
+                    if (loading_kernel)
+                    {
+                        g_cpu->Reset_Context();
+                        g_cpu->Set_PC(0x8000);
                     }
                 }
             }
@@ -394,14 +453,33 @@ namespace zero_mate::soc
                 g_external_peripherals.emplace_back();
 
                 // Call the extern "Create_Peripheral" function to create the peripheral.
-                const auto status = static_cast<IExternal_Peripheral::NInit_Status>(
-                create_peripheral(&g_external_peripherals.back(),
+                IExternal_Peripheral::NInit_Status status;
+                /*create_peripheral(&g_external_peripherals.back(),
                                   config.name.c_str(),
                                   config.connection.data(),
                                   config.connection.size(),
-                                  &Set_GPIO_Pin,
+                                  &Set_GPIO_Pin_Without_Notify,
                                   &Read_GPIO_Pin,
-                                  utils::CSingleton<utils::CLogging_System>::Get_Instance()));
+                                  utils::CSingleton<utils::CLogging_System>::Get_Instance()));*/
+
+                if (config.connection.size() != 3) {
+                    status = static_cast<IExternal_Peripheral::NInit_Status>(create_peripheral(&g_external_peripherals.back(),
+                        config.name.c_str(),
+                        config.connection.data(),
+                        config.connection.size(),
+                        &Set_GPIO_Pin,
+                        &Read_GPIO_Pin,
+                        utils::CSingleton<utils::CLogging_System>::Get_Instance()));
+                }
+                else {
+                    status = static_cast<IExternal_Peripheral::NInit_Status>(create_peripheral(&g_external_peripherals.back(),
+                        config.name.c_str(),
+                        config.connection.data(),
+                        config.connection.size(),
+                        &Set_GPIO_Pin_Without_Notify,
+                        &Read_GPIO_Pin,
+                        utils::CSingleton<utils::CLogging_System>::Get_Instance()));
+                }
 
                 switch (status)
                 {

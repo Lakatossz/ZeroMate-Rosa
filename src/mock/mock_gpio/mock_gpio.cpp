@@ -436,7 +436,55 @@ namespace zero_mate::peripheral
         Mirror_Pin_State_In_GPLEVn(pin_idx, state);
 
         // Notify external peripherals.
+        //std::cout << "Nastavuju pin: " << static_cast<std::uint32_t>(pin_idx) << std::endl;
         Notify_External_Peripherals(static_cast<std::uint32_t>(pin_idx));
+
+        if (interrupt_detected)
+        {
+            // Set a pending interrupt on the pin.
+            pin.Set_Pending_IRQ(true);
+
+            // Reflect the pending IRQ in GPEDS.
+            Update_GPEDS(pin_idx);
+        }
+
+        return IGPIO_Manager::IPin::NPin_Set_Status::OK;
+    }
+
+    IGPIO_Manager::IPin::NPin_Set_Status CGPIO_Manager_Mock::Set_Pin_State_Without_Notify(std::size_t pin_idx, Mock_Pin::NState state)
+    {
+        // Make sure pin_idx is valid.
+        if (pin_idx >= IGPIO_Manager::Number_of_GPIO_Pins)
+        {
+            return IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Number;
+        }
+
+        // Get the pin by its index.
+        auto& pin = m_pins[pin_idx];
+
+        const IGPIO_Manager::IPin::NFunction pin_function = pin.Get_Function();
+
+        // Make sure the pin function has been set to input.
+        // clang-format off
+        if ((pin_function != IGPIO_Manager::IPin::NFunction::Input) &&
+            (pin_function != IGPIO_Manager::IPin::NFunction::Alt_5) &&
+            (pin_function != IGPIO_Manager::IPin::NFunction::Alt_0))
+        {
+            return IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Function;
+        }
+        // clang-format on
+
+        // Check if changing the pin's state triggers an interrupt.
+        // This must be checked before the state is changed.
+        const bool interrupt_detected = pin.Is_Interrupt_Detected(state);
+
+        // Change the state of the pin.
+        pin.Set_State(state);
+        Mirror_Pin_State_In_GPLEVn(pin_idx, state);
+
+        // Notify external peripherals.
+        //std::cout << "Nastavuju pin: " << static_cast<std::uint32_t>(pin_idx) << std::endl;
+        //Notify_External_Peripherals(static_cast<std::uint32_t>(pin_idx));
 
         if (interrupt_detected)
         {
@@ -518,7 +566,8 @@ namespace zero_mate::peripheral
 
     int CGPIO_Manager_Mock::Static_Set_GPIO_Pin(std::uint32_t pin, bool state) {
         if (!current_instance) return 0;
-        current_instance->Set_Pin_State(pin, state ? IGPIO_Manager::IPin::NState::High : IGPIO_Manager::IPin::NState::Low);
+        //std::cout << "Jsem ve Static_Set_GPIO_Pin\n";
+        current_instance->Set_Pin_State_Without_Notify(pin, state ? IGPIO_Manager::IPin::NState::High : IGPIO_Manager::IPin::NState::Low);
         return 0;
     }
 

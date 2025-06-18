@@ -6,7 +6,7 @@
 #include <thread>
 #include <fstream>
 #include <iostream>
-#include "../src/max6864.hpp"
+#include "../src/a810.hpp"
 #include "zero_mate/external_peripheral.hpp"
 #include "zero_mate/utils/singleton.hpp"
 #include "../../../src/core/peripherals/peripheral.hpp"
@@ -60,7 +60,7 @@ private:
 //-----------------------------------------------------------------------------
 // Testovací fixture pro WDT
 //-----------------------------------------------------------------------------
-class Test_MAX6864 : public ::testing::Test {
+class Test_A810 : public ::testing::Test {
 protected:
     void SetUp() override {
         m_gpio = std::make_shared<CGPIO_Manager_Mock>();
@@ -76,16 +76,14 @@ protected:
             m_monitor_thread.join();
         }
 
-        m_wdt.release();
+        m_sensor.release();
         CGPIO_Manager_Mock::current_instance = nullptr;
         fs::remove_all("peripherals");
     }
 
-    const std::uint32_t m_pin_reset = 17;
-    const std::uint32_t m_pin_wdi = 18;
-    const std::uint32_t m_pin_mr = 19;
+    const std::uint32_t m_pin = 26;
     std::shared_ptr<CGPIO_Manager_Mock> m_gpio; // Zmìnìno na shared_ptr
-    std::unique_ptr<CMax6864> m_wdt;
+    std::unique_ptr<CA810> m_sensor;
     utils::CLogging_System* m_logging_system;
     std::atomic<bool> m_reset_detected{ false }; // Pøesunuto do fixture
     std::atomic<bool> m_monitoring_active{ true };
@@ -95,58 +93,40 @@ protected:
 //-----------------------------------------------------------------------------
 // Testovací pøípady
 //-----------------------------------------------------------------------------
-TEST_F(Test_MAX6864, Initialization_Without_Configuration) {
-    m_wdt = std::make_unique<CMax6864>(
-        "TestWDT",
-        m_pin_reset,
-        m_pin_wdi,
-        m_pin_mr,
+TEST_F(Test_A810, Initialization) {
+    std::ofstream("peripherals/a810_config.json") << R"({
+  "configuration": [
+    {
+      "probability": [ 100 ]
+    }
+  ]
+})";
+
+    m_sensor = std::make_unique<CA810>(
+        "TestSensor",
+        m_pin,
         &CGPIO_Manager_Mock::Static_Read_GPIO_Pin,
         &CGPIO_Manager_Mock::Static_Set_GPIO_Pin,
         m_logging_system
     );
 
     // Oèekáváme HIGH po inicializaci
-    EXPECT_EQ(m_gpio->Get_Pin(m_pin_reset), CGPIO_Manager_Mock::NState::Low);
+    EXPECT_EQ(m_gpio->Get_Pin(m_pin), CGPIO_Manager_Mock::NState::Low);
+    EXPECT_TRUE(true);
 }
 
-TEST_F(Test_MAX6864, Initialization) {
-    std::ofstream("peripherals/max6864_config.json") << R"({
+TEST_F(Test_A810, WDT_Bubble_Found) {
+    std::ofstream("peripherals/a810_config.json") << R"({
   "configuration": [
     {
-      "time_interval": [ 60 ]
+      "probability": [ 100 ]
     }
   ]
 })";
 
-    m_wdt = std::make_unique<CMax6864>(
-        "TestWDT",
-        m_pin_reset,
-        m_pin_wdi,
-        m_pin_mr,
-        &CGPIO_Manager_Mock::Static_Read_GPIO_Pin,
-        &CGPIO_Manager_Mock::Static_Set_GPIO_Pin,
-        m_logging_system
-    );
-
-    // Oèekáváme HIGH po inicializaci
-    EXPECT_EQ(m_gpio->Get_Pin(m_pin_reset), CGPIO_Manager_Mock::NState::Low);
-}
-
-TEST_F(Test_MAX6864, WDT_Timeout_Triggers_Reset) {
-    std::ofstream("peripherals/max6864_config.json") << R"({
-  "configuration": [
-    {
-      "time_interval": [ 2 ]
-    }
-  ]
-})";
-
-    m_wdt = std::make_unique<CMax6864>(
-        "TestWDT",
-        m_pin_reset,
-        m_pin_wdi,
-        m_pin_mr,
+    m_sensor = std::make_unique<CA810>(
+        "TestSensor",
+        m_pin,
         &CGPIO_Manager_Mock::Static_Read_GPIO_Pin,
         &CGPIO_Manager_Mock::Static_Set_GPIO_Pin,
         m_logging_system
@@ -155,7 +135,7 @@ TEST_F(Test_MAX6864, WDT_Timeout_Triggers_Reset) {
     // Spuštìní monitorovacího vlákna
     m_monitor_thread = std::thread([this]() {
         while (m_monitoring_active) {
-            if (m_gpio->Static_Read_GPIO_Pin(m_pin_reset)) {
+            if (m_gpio->Static_Read_GPIO_Pin(m_pin)) {
                 m_reset_detected = true;
                 return;
             }
@@ -163,25 +143,23 @@ TEST_F(Test_MAX6864, WDT_Timeout_Triggers_Reset) {
         }
         });
 
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::this_thread::sleep_for(std::chrono::seconds(10));
 
     EXPECT_TRUE(m_reset_detected);
 }
 
-TEST_F(Test_MAX6864, No_Reset) {
-    std::ofstream("peripherals/max6864_config.json") << R"({
+TEST_F(Test_A810, Bubble_Not_Found) {
+    std::ofstream("peripherals/a810_config.json") << R"({
   "configuration": [
     {
-      "time_interval": [ 2 ]
+      "probability": [ 0 ]
     }
   ]
 })";
 
-    m_wdt = std::make_unique<CMax6864>(
-        "TestWDT",
-        m_pin_reset,
-        m_pin_wdi,
-        m_pin_mr,
+    m_sensor = std::make_unique<CA810>(
+        "TestSensor",
+        m_pin,
         &CGPIO_Manager_Mock::Static_Read_GPIO_Pin,
         &CGPIO_Manager_Mock::Static_Set_GPIO_Pin,
         m_logging_system
@@ -190,9 +168,7 @@ TEST_F(Test_MAX6864, No_Reset) {
     // Spuštìní monitorovacího vlákna
     m_monitor_thread = std::thread([this]() { // Místo lokální promìnné
         while (m_monitoring_active) {
-            m_gpio->Static_Set_GPIO_Pin(m_pin_wdi, true);
-            m_wdt->GPIO_Subscription_Callback(m_pin_wdi);
-            if (m_gpio->Static_Read_GPIO_Pin(m_pin_reset)) {
+            if (m_gpio->Static_Read_GPIO_Pin(m_pin)) {
                 m_reset_detected = true;
                 return;
             }

@@ -5,12 +5,12 @@
          "name":"unix_makefiles_gcc_release",
          "generator":"Unix Makefiles",
          "binaryDir":"${sourceDir}/build/unix_makefiles/gcc/release",
-         "cacheVariables":{
-            "CMAKE_BUILD_TYPE":"Release",
-            "ENABLE_TESTING":"OFF",
-            "CMAKE_C_COMPILER":"gcc",
-            "CMAKE_CXX_COMPILER":"g++"
-         }
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release",
+          "ENABLE_TESTING": "ON",
+          "CMAKE_C_COMPILER": "gcc",
+          "CMAKE_CXX_COMPILER": "g++"
+        }
       },
       {
          "name":"unix_makefiles_gcc_debug",
@@ -42,12 +42,12 @@
          "name":"unix_makefiles_clang_release",
          "generator":"Unix Makefiles",
          "binaryDir":"${sourceDir}/build/unix_makefiles/clang/release",
-         "cacheVariables":{
-            "CMAKE_BUILD_TYPE":"Release",
-            "ENABLE_TESTING":"OFF",
-            "CMAKE_C_COMPILER":"clang",
-            "CMAKE_CXX_COMPILER":"clang++"
-         }
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release",
+          "ENABLE_TESTING": "ON",
+          "CMAKE_C_COMPILER": "clang",
+          "CMAKE_CXX_COMPILER": "clang++"
+        }
       },
       {
          "name":"unix_makefiles_clang_debug",
@@ -76,12 +76,12 @@
          "name":"ninja_clang_release",
          "generator":"Ninja",
          "binaryDir":"${sourceDir}/build/ninja/clang/release",
-         "cacheVariables":{
-            "CMAKE_BUILD_TYPE":"Release",
-            "ENABLE_TESTING":"OFF",
-            "CMAKE_C_COMPILER":"clang",
-            "CMAKE_CXX_COMPILER":"clang++"
-         }
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release",
+          "ENABLE_TESTING": "ON",
+          "CMAKE_C_COMPILER": "clang",
+          "CMAKE_CXX_COMPILER": "clang++"
+        }
       },
       {
          "name":"ninja_clang_code_coverage",
@@ -110,12 +110,12 @@
          "name":"ninja_gcc_release",
          "generator":"Ninja",
          "binaryDir":"${sourceDir}/build/ninja/gcc/release",
-         "cacheVariables":{
-            "CMAKE_BUILD_TYPE":"Release",
-            "ENABLE_TESTING":"OFF",
-            "CMAKE_C_COMPILER":"gcc",
-            "CMAKE_CXX_COMPILER":"g++"
-         }
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release",
+          "ENABLE_TESTING": "ON",
+          "CMAKE_C_COMPILER": "gcc",
+          "CMAKE_CXX_COMPILER": "g++"
+        }
       },
       {
          "name":"ninja_gcc_debug",

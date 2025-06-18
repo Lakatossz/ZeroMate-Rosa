@@ -191,6 +191,8 @@ namespace zero_mate::peripheral
         /// \return Information about whether the state has been changed successfully or not
         // -------------------------------------------------------------------------------------------------------------
         [[nodiscard]] IGPIO_Manager::IPin::NPin_Set_Status Set_Pin_State(std::size_t pin_idx, IGPIO_Manager::IPin::NState state) override;
+        
+        [[nodiscard]] IGPIO_Manager::IPin::NPin_Set_Status Set_Pin_State_Without_Notify(std::size_t pin_idx, IGPIO_Manager::IPin::NState state);
 
         void Enable_HW_Reset_Listening(uint32_t pin_idx) override;
 

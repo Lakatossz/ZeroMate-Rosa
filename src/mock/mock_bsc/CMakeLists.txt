@@ -4,13 +4,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Add the mock_bsc as a shared library
-add_library(mock_bsc SHARED)
-
-# Definuj exportní makro pro hlavní projekt (pokud ještě není v hlavním CMakeLists.txt)
-target_compile_definitions(mock_bsc
-    PRIVATE
-        ZM_MOCK_BSC_EXPORT
-)
+add_library(mock_bsc STATIC)
 
 # Specify the public include directories
 target_include_directories(mock_bsc

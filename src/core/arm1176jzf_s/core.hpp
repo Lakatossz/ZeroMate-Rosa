@@ -255,7 +255,7 @@ namespace zero_mate::arm1176jzf_s
         /// \return Second operand involved in the operation
         // -------------------------------------------------------------------------------------------------------------
         [[nodiscard]] utils::math::TShift_Result<std::uint32_t>
-        Get_Second_Operand(isa::CData_Processing instruction) const noexcept;
+            Get_Second_Operand(isa::CData_Processing instruction) const noexcept;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Performs a shift on the given value.
@@ -265,8 +265,8 @@ namespace zero_mate::arm1176jzf_s
         /// \return Result of the shift operation
         // -------------------------------------------------------------------------------------------------------------
         [[nodiscard]] utils::math::TShift_Result<std::uint32_t> Perform_Shift(isa::CInstruction::NShift_Type shift_type,
-                                                                              std::uint32_t shift_amount,
-                                                                              std::uint32_t value) const noexcept;
+            std::uint32_t shift_amount,
+            std::uint32_t value) const noexcept;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Calculates the offset from the base address in a single data transfer instruction.
@@ -292,8 +292,8 @@ namespace zero_mate::arm1176jzf_s
         /// \param dest_reg_idx Index of the destination register (data itself)
         // -------------------------------------------------------------------------------------------------------------
         void Perform_Halfword_Data_Transfer_Read(isa::CHalfword_Data_Transfer::NType type,
-                                                 std::uint32_t addr,
-                                                 std::uint32_t dest_reg_idx);
+            std::uint32_t addr,
+            std::uint32_t dest_reg_idx);
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Performs a halfword data write to a given address.
@@ -302,8 +302,8 @@ namespace zero_mate::arm1176jzf_s
         /// \param src_reg_idx Index of the source register (data itself)
         // -------------------------------------------------------------------------------------------------------------
         void Perform_Halfword_Data_Transfer_Write(isa::CHalfword_Data_Transfer::NType type,
-                                                  std::uint32_t addr,
-                                                  std::uint32_t src_reg_idx);
+            std::uint32_t addr,
+            std::uint32_t src_reg_idx);
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Executes an MSR instruction (move data to CPSR/SPSR from an ARM register).
@@ -339,7 +339,7 @@ namespace zero_mate::arm1176jzf_s
         /// \return Modified value which is passed as a parameter
         // -------------------------------------------------------------------------------------------------------------
         [[nodiscard]] static inline std::uint32_t
-        Set_Interrupt_Mask_Bits(std::uint32_t cpsr, isa::CCPS instruction, bool set);
+            Set_Interrupt_Mask_Bits(std::uint32_t cpsr, isa::CCPS instruction, bool set);
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Determines the mode of the CPU that should be used in a block data transfer instruction.
@@ -548,9 +548,9 @@ namespace zero_mate::arm1176jzf_s
         // -------------------------------------------------------------------------------------------------------------
         template<typename Instruction>
         [[nodiscard]] std::uint32_t Calculate_Base_Address(Instruction instruction,
-                                                           std::uint32_t base_reg_idx,
-                                                           CCPU_Context::NCPU_Mode cpu_mode,
-                                                           std::uint32_t number_of_regs) const;
+            std::uint32_t base_reg_idx,
+            CCPU_Context::NCPU_Mode cpu_mode,
+            std::uint32_t number_of_regs) const;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Calculates the second immediate operand of a given instruction.
@@ -560,7 +560,7 @@ namespace zero_mate::arm1176jzf_s
         // -------------------------------------------------------------------------------------------------------------
         template<typename Instruction>
         [[nodiscard]] utils::math::TShift_Result<std::uint32_t>
-        Get_Second_Operand_Imm(Instruction instruction) const noexcept;
+            Get_Second_Operand_Imm(Instruction instruction) const noexcept;
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Writes data to the bus.
@@ -590,7 +590,7 @@ namespace zero_mate::arm1176jzf_s
         // -------------------------------------------------------------------------------------------------------------
         template<std::unsigned_integral Type>
         void
-        Read_Write_Value(isa::CSingle_Data_Transfer instruction, std::uint32_t virtual_addr, std::uint32_t reg_idx);
+            Read_Write_Value(isa::CSingle_Data_Transfer instruction, std::uint32_t virtual_addr, std::uint32_t reg_idx);
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Checks if the IVT (interrupt vector table) has been reallocated to the higher address (0xFFFF0000).

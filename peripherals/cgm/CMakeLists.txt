@@ -34,6 +34,7 @@ target_include_directories(cgm
 target_link_libraries(cgm
     PRIVATE
         imgui_glfw
+    PUBLIC
         logging_system
         mock_bsc
         mock_gpio
@@ -49,7 +50,7 @@ add_custom_command(TARGET cgm
 )
 
 # ------------------ TESTING ------------------
-if(BUILD_TESTING)
+if(BUILD_TESTING)    
     include(CTest)
     enable_testing()
 
@@ -87,9 +88,6 @@ if(BUILD_TESTING)
         PRIVATE
             cgm
             GTest::gtest_main
-            logging_system
-            mock_bsc
-            mock_gpio
     )
 
     add_test(

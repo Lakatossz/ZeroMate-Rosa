@@ -149,6 +149,9 @@ namespace zero_mate::soc
     /// Broadcom serial controller 3 (BSC 3)
     extern std::shared_ptr<peripheral::CBSC> g_bsc_3;
 
+    // Kernel path
+    extern std::shared_ptr<std::string> g_kernel_path;
+
     // -----------------------------------------------------------------------------------------------------------------
     /// \brief Initializes the system.
     ///

@@ -19,6 +19,8 @@
 #include <sstream>
 #include <string>
 #include <random>
+#include <chrono>
+#include <ctime>
 /// \endcond
 
 #include "imgui.h"
@@ -338,4 +340,6 @@ private:
 	int m_patient_idx;
 
 	ImGuiContext* m_context;									///< ImGUI context (rendering the GUI)
+
+	std::ofstream file;
 };

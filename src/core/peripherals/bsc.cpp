@@ -47,10 +47,6 @@ namespace zero_mate::peripheral
         const std::size_t reg_idx = addr / Reg_Size;
         const auto reg_type = static_cast<NRegister>(reg_idx);
 
-        m_logging_system.Info(("addr: " + std::to_string(addr)).c_str());
-        //m_logging_system.Info(("data: " + std::to_string(data)).c_str());
-        m_logging_system.Info(("size: " + std::to_string(size)).c_str());
-
         // Write data to the peripheral's registers.
         std::copy_n(data, size, &std::bit_cast<char*>(m_regs.data())[addr]);
 
@@ -83,7 +79,6 @@ namespace zero_mate::peripheral
         // Check if the FIFO should be cleared.
         if (Should_FIFO_Be_Cleared())
         {
-            m_logging_system.Info("Cistim fifo");
             Clear_FIFO();
         }
 
@@ -189,54 +184,45 @@ namespace zero_mate::peripheral
         {
             // Send the start bit.
             case NState_Machine::Start_Bit:
-                m_logging_system.Info("NState_Machine::Start_Bit");
                 I2C_Send_Start_Bit();
                 break;
 
             // Send the slave's address.
             case NState_Machine::Address:
-                m_logging_system.Info("NState_Machine::Address");
                 I2C_Send_Slave_Address();
                 break;
 
             // Send the RW bit.
             case NState_Machine::RW:
-                m_logging_system.Info("NState_Machine::RW");
                 I2C_Send_RW_Bit();
                 break;
 
             // Receive the ACK_1 bit.
             case NState_Machine::ACK_1:
-                m_logging_system.Info("NState_Machine::ACK_1");
                 I2C_Receive_ACK_1();
                 break;
 
             // Send the data payload.
             case NState_Machine::Send:
-                m_logging_system.Info("NState_Machine::Send");
                 I2C_Send_Data();
                 break;
 
             // Send the data payload.
             case NState_Machine::Recieve:
-                m_logging_system.Info("NState_Machine::Recieve");
                 I2C_Recieve_Data();
                 break;
 
             // Receive the ACK_2 bit.
             case NState_Machine::ACK_2:
-                m_logging_system.Info("NState_Machine::ACK_2");
                 I2C_Receive_ACK_2();
                 break;
             
             case NState_Machine::Send_ACK_2:
-                m_logging_system.Info("NState_Machine::ACK_2");
                 I2C_Send_ACK();
                 break;
 
             // Send the stop bit.
             case NState_Machine::Stop_Bit:
-                m_logging_system.Info("NState_Machine::Stop_Bit");
                 I2C_Send_Stop_Bit();
                 break;
         }
@@ -257,7 +243,7 @@ namespace zero_mate::peripheral
         --m_transaction.addr_idx;
         const auto curr_bit = static_cast<bool>((m_transaction.address >> m_transaction.addr_idx) & 0b1U);
 
-        m_logging_system.Info(("Adresa: " + std::to_string(m_transaction.address)).c_str());
+        std::cout << "Posilam bit adresy: " << ((m_transaction.address >> m_transaction.addr_idx) & 0b1U) << std::endl;
 
         // Send the bit out to the target device.
         Set_GPIO_pin(SDA_Pin_Idx, curr_bit);
@@ -265,6 +251,7 @@ namespace zero_mate::peripheral
         // Have we sent all bits of the slave's address?
         if (m_transaction.addr_idx == 0)
         {
+            std::cout << "Poslal jsem adresu: " << m_transaction.address << std::endl;
             // Move on to sending the RW bit.
             m_transaction.state = NState_Machine::RW;
         }
@@ -286,12 +273,9 @@ namespace zero_mate::peripheral
             m_logging_system.Error("Failed to receive ACK_1");
         }
 
-        m_logging_system.Info("Prijal jsem ACK_1");
-
         // Move on to sending the data payload itself.
         if (!m_transaction.read) {
             m_transaction.state = NState_Machine::Send;
-            m_logging_system.Info("Nastavuju NState_Machine::Send");
         }
         else {
             m_transaction.data_idx = 8;
@@ -317,8 +301,6 @@ namespace zero_mate::peripheral
         // Send out the current bit of the data payload.
         Set_GPIO_pin(SDA_Pin_Idx, curr_bit);
 
-        m_logging_system.Info(std::to_string(m_transaction.data_idx).c_str());
-
         // Have we sent all 8 bits already?
         if (m_transaction.data_idx == 0)
         {
@@ -327,8 +309,6 @@ namespace zero_mate::peripheral
             {
                 m_fifo.pop();
             }
-
-            m_logging_system.Info("Nastavuju NState_Machine::ACK_2");
 
             // Move on to receiving the ACK_2 bit.
             m_transaction.state = NState_Machine::ACK_2;
@@ -348,15 +328,11 @@ namespace zero_mate::peripheral
             m_transaction.data |= (0b1U << (m_transaction.data_idx % 8));
         }
 
-        m_logging_system.Info(("Prijal jsem bit: " + std::to_string(curr_bit)).c_str());
-
         if (m_transaction.data_idx == 0)
         {
-            m_logging_system.Info(("Prijal jsem: " + std::to_string(m_transaction.data)).c_str());
             m_fifo.push(m_transaction.data);
             m_transaction.data = { 0 };
             if (m_transaction.length == 0) {
-                m_logging_system.Info("NState_Machine::Stop_Bit");
                 m_transaction.state = NState_Machine::Stop_Bit;
             }
             else {
@@ -379,23 +355,10 @@ namespace zero_mate::peripheral
         // We have finished sending out another byte of data.
         --m_transaction.length;
 
-        m_logging_system.Info(("Dostal jsem ACK2: " + std::to_string(m_transaction.length)).c_str());
-
-        // Is there any other data in the FIFO to be sent to the device?
-        /*if (m_transaction.length != 0)
-        {
-            m_logging_system.Info("Nastavuju NState_Machine::Send");
-            // Move on to sending another byte of data.
-            m_transaction.state = NState_Machine::Send;
-            m_transaction.data_idx = Data_Length;
-        }
-        else*/ 
-
         if (!m_transaction.read)
         {
             if (m_transaction.length != 0)
             {
-                m_logging_system.Info("Nastavuju Send, PYCO");
                 // Move on to sending another byte of data.
                 m_transaction.state = NState_Machine::Send;
                 m_transaction.data_idx = Data_Length;
@@ -403,17 +366,14 @@ namespace zero_mate::peripheral
             }
             else {
                 // Let us terminate the transaction.
-                m_logging_system.Info("Nastavuju NState_Machine::Stop_Bit");
                 m_transaction.state = NState_Machine::Stop_Bit;
             }
         }
         else if (!m_transaction.request_sended) {
-            m_logging_system.Info("Nastavuju NState_Machine::Start_Bit");
             m_transaction.state = NState_Machine::Start_Bit;
             m_transaction.request_sended = true;
         }
         else {
-            m_logging_system.Info("Nastavuju NState_Machine::Recieve");
             m_transaction.state = NState_Machine::Recieve;
             m_transaction.request_sended = false;
         }
@@ -425,7 +385,6 @@ namespace zero_mate::peripheral
 
         if (m_transaction.length != 0)
         {
-            m_logging_system.Info("Nastavuju Send, PYCO");
             // Move on to sending another byte of data.
             --m_transaction.length;
             m_transaction.data_idx = Data_Length;
@@ -433,7 +392,6 @@ namespace zero_mate::peripheral
         }
         else {
             // Let us terminate the transaction.
-            m_logging_system.Info("Nastavuju NState_Machine::Stop_Bit");
             m_transaction.state = NState_Machine::Stop_Bit;
         }
     }

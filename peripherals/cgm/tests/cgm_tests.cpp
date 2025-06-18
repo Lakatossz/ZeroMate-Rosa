@@ -178,9 +178,14 @@ protected:
     std::shared_ptr<zero_mate::peripheral::CGPIO_Manager_Mock> m_gpio;
     std::unique_ptr<peripheral::Mock_BSC> m_bsc;
     std::unique_ptr<CCgm> m_cgm;
+    std::unique_ptr<CCgm> m_cgm_1;
+    std::unique_ptr<CCgm> m_cgm_2;
+    std::unique_ptr<CCgm> m_cgm_3;
     utils::CLogging_System* m_logging_system;
     std::uint32_t m_address = 0x48;
     std::uint32_t m_address_1 = 0x4A;
+    std::uint32_t m_address_2 = 0x4C;
+    std::uint32_t m_address_3 = 0x4E;
     std::uint32_t m_sda_pin = 2;
     std::uint32_t m_scl_pin = 3;
 };
@@ -491,7 +496,7 @@ TEST_F(Test_Cgm, Read_Lower_Glycemia_Once) {
     EXPECT_TRUE(correct);
 }
 
-TEST_F(Test_Cgm, Read_Glycemia_Once_With_Other_I2C_Device) {
+TEST_F(Test_Cgm, Read_Glycemia_Once_With_Other_I2C_Devices) {
     bool correct = true;
 
     std::string config_string = R"({
@@ -507,8 +512,6 @@ TEST_F(Test_Cgm, Read_Glycemia_Once_With_Other_I2C_Device) {
 
     std::ofstream("peripherals/cgm_config.json") << config_string;
 
-    std::unique_ptr<CCgm> m_cgm1;
-
     try {
         // Vytvoøení instance senzoru (I2C slave)
         m_cgm = std::make_unique<CCgm>(
@@ -521,9 +524,29 @@ TEST_F(Test_Cgm, Read_Glycemia_Once_With_Other_I2C_Device) {
             m_logging_system
         );
 
-        m_cgm1 = std::make_unique<CCgm>(
+        m_cgm_1 = std::make_unique<CCgm>(
             "TestSensor1",
             m_address_1,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_cgm_2 = std::make_unique<CCgm>(
+            "TestSensor2",
+            m_address_2,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_cgm_3 = std::make_unique<CCgm>(
+            "TestSensor3",
+            m_address_3,
             m_sda_pin,
             m_scl_pin,
             &m_gpio->Static_Read_GPIO_Pin,
@@ -537,24 +560,25 @@ TEST_F(Test_Cgm, Read_Glycemia_Once_With_Other_I2C_Device) {
 
     if (m_cgm != nullptr && m_gpio != nullptr && m_bsc != nullptr) {
         m_gpio->Add_External_Peripheral(m_cgm.get());
-        m_gpio->Add_External_Peripheral(m_cgm1.get());
+        m_gpio->Add_External_Peripheral(m_cgm_1.get());
+        m_gpio->Add_External_Peripheral(m_cgm_2.get());
+        m_gpio->Add_External_Peripheral(m_cgm_3.get());
 
         const float target = GetTarget(config_string, "lower_value");
         const float epsilon = 0.01;
 
         Write(0x81, m_address);
-        float glycemia = Read(m_address);
-
-        std::cout << "Prvni: " << glycemia << std::endl;
-
-        correct = std::abs(glycemia - target) < epsilon;
+        correct = std::abs(Read(m_address) - target) < epsilon;
 
         Write(0x81, m_address_1);
-        glycemia = Read(m_address_1);
+        correct = std::abs(Read(m_address_1) - target) < epsilon;
 
-        std::cout << "Druha: " << glycemia << std::endl;
+        Write(0x81, m_address_2);
 
-        correct = std::abs(glycemia - target) < epsilon;
+        correct = std::abs(Read(m_address_1) - target) < epsilon;
+
+        Write(0x81, m_address_3);
+        correct = std::abs(Read(m_address_1) - target) < epsilon;
     }
     else {
         correct = false;

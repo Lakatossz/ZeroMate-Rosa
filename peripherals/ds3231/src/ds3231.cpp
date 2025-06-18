@@ -63,7 +63,7 @@ nlohmann::json CDS3231::Parse_JSON_File(const std::string& path)
 	// Make sure the file has been opened successfully.
 	if (!config_file)
 	{
-		m_logging_system->Error("Cannot load ");
+		m_logging_system->Error(("Cannot load configuraiton " + path).c_str());
 
 		// Return an empty JSON object.
 		return {};
@@ -89,7 +89,7 @@ void CDS3231::Initialize()
 {
 	nlohmann::json j = Parse_JSON_File(CDS3231_Config_File);
 
-	if (j.contains("configuration") &&
+	if (!j.empty() && j.contains("configuration") &&
 		j["configuration"].is_array() &&
 		!j["configuration"].empty())
 	{
@@ -148,7 +148,6 @@ void CDS3231::GPIO_Subscription_Callback([[maybe_unused]] std::uint32_t pin_idx)
 	// If a stop bit has just been detected, terminate the current transaction.
 	if (stop_bit_detected)
 	{
-		m_logging_system->Info(("Nastavuju Start_Bit: " + std::to_string(m_transaction.data_idx)).c_str());
 		m_transaction.state = NState_Machine::Start_Bit;
 		Received_Transaction_Callback();
 	}
@@ -203,57 +202,50 @@ void CDS3231::I2C_Update()
 	{
 		// Receive the start bit.
 	case NState_Machine::Start_Bit:
-		m_logging_system->Info("Start_Bit");
 		I2C_Receive_Start_Bit();
 		break;
 
 		// Receive the slave's address.
 	case NState_Machine::Address:
-		m_logging_system->Info("Address");
 		I2C_Receive_Address();
 		break;
 
 		// Receive the RW bit.
 	case NState_Machine::RW:
-		m_logging_system->Info("RW");
 		I2C_Receive_RW_Bit();
 		break;
 
 		// Send the ACK_1 bit.
 	case NState_Machine::ACK_1:
-		m_logging_system->Info("ACK_1");
 		m_transaction.state = NState_Machine::Recieve;
 		break;
 
 	case NState_Machine::ACK_1_Send:
-		m_logging_system->Info("ACK_1_Send");
 		Send_ACK();
 		m_transaction.state = NState_Machine::Send;
 		break;
 
 	case NState_Machine::Recieve:
-		m_logging_system->Info("Recieve");
 		I2C_Receive_Data();
 		break;
 
 		// Receive data (payload).
 	case NState_Machine::Send:
-		m_logging_system->Info("Send");
 		I2C_Send_Data();
 		break;
 
 	case NState_Machine::Receive_ACK:
-		m_logging_system->Info("Receive_ACK_2");
 		I2C_Receive_ACK_2();
 		break;
 
 		// Send the ACK_2 bit.
 	case NState_Machine::ACK_2:
-		m_logging_system->Info("ACK_2");
 		// Move on to receiving another byte.
 		m_transaction.data = 0;
 		m_transaction.data_idx = Data_Length;
 		m_transaction.state = NState_Machine::Recieve;
+		// Send an ACK bit to the master device.
+		Send_ACK();
 		break;
 	}
 }
@@ -322,8 +314,6 @@ void CDS3231::Process_CMD(std::uint8_t data)
 		m_curr_cmd = static_cast<NCMD>(data);
 	}
 
-	m_logging_system->Info(("NCMD: " + std::to_string(data)).c_str());
-
 	// Process the current command.
 	switch (m_curr_cmd)
 	{
@@ -373,8 +363,6 @@ void CDS3231::I2C_Receive_Address()
 	if (m_transaction.addr_idx == 0)
 	{
 		// Move on to receiving the RW bit.
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
-		m_logging_system->Info("Nastavuju NState_Machine::RW");
 		m_transaction.state = NState_Machine::RW;
 	}
 }
@@ -384,19 +372,21 @@ void CDS3231::I2C_Receive_RW_Bit()
 	// Read the RW bit.
 	m_transaction.read = m_read_pin(m_sda_pin_idx);
 
-	m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
-
 	Send_ACK();
 
-	if (m_transaction.read && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
-		m_logging_system->Info("Nastavuju NState_Machine::Send");
+	if (((m_transaction.address & 0x01) != 0) && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
 		m_transaction.data = m_output_fifo[0];
 		m_transaction.data_idx = Data_Length;
 		m_transaction.length = 7;
 		m_transaction.state = NState_Machine::Send;
+		Send_ACK();
+	}
+	else if (((m_transaction.address & 0x01) != 0) && m_address != (m_transaction.address & ~1U)) {
+		m_transaction.state = NState_Machine::Recieve;
+		Send_ACK();
 	}
 	else {
-		//Send_ACK();
+		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_1;
 	}
 }
@@ -411,33 +401,19 @@ void CDS3231::I2C_Receive_Data()
 		m_transaction.data |= (0b1U << m_transaction.data_idx);
 	}
 
-	m_logging_system->Info(std::to_string(m_transaction.data_idx).c_str());
-
 	// Have we read all 8 bits of the data yet?
 	if (m_transaction.data_idx == 0)
 	{
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
 		// Store the data into the FIFO only if it is meant to be for us.
 		if (m_address == (m_transaction.address & ~1U))
 		{
 			m_fifo.push_back(m_transaction.data);
-
-			// Send an ACK bit to the master device.
-			//Send_ACK();
 		}
 
 		if (!m_transaction.read && m_address == (m_transaction.address & ~1U)) {
-			//m_transaction.state = NState_Machine::ACK_2;
 			m_transaction.request_sended = true;
-			//m_transaction.data_idx = Data_Length;
-		}
-		else {
-			// Nemel by tady byt, protoze vsichni museji 
-			//m_transaction.state = NState_Machine::Start_Bit;
 		}
 
-		// Send an ACK bit to the master device.
-		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_2;
 	}
 }
@@ -452,28 +428,22 @@ void CDS3231::I2C_Send_Data()
 			// Get bit that is gonna be sent
 			bool bitToSend = (m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1;
 
-			m_logging_system->Info(("data: " + std::to_string(m_transaction.data)).c_str());
-			m_logging_system->Info(("data_idx: " + std::to_string(m_transaction.data_idx)).c_str());
-			m_logging_system->Info(("bitToSend: " + std::to_string((m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1)).c_str());
-
 			// Set SDA pin to the desired value
 			m_set_pin(m_sda_pin_idx, bitToSend);
 
 			// Were all the bits sent?
 			if (m_transaction.data_idx == 0)
 			{
-				m_logging_system->Info(("length: " + std::to_string(m_transaction.length)).c_str());
-
 				// Remove first item from the FIFO.
 				if (m_transaction.length > 0)
 				{
 					m_transaction.state = NState_Machine::Receive_ACK;
-					//m_output_fifo.erase(m_output_fifo.begin());
-					//m_transaction.data = m_output_fifo[0];
-					//m_transaction.data_idx = Data_Length;
 				}
 				else {
 					m_transaction.request_sended = false;
+
+					m_clock++;
+					SDA_Pin_Change_Callback(false);
 				}
 			}
 		}
@@ -483,13 +453,16 @@ void CDS3231::I2C_Send_Data()
 void CDS3231::Send_ACK()
 {
 	// Do NOT send an ACK bit to the master devices, unless they are talking to us.
-	if ((m_transaction.address & ~1U) != m_address)
-	{
-		return;
-	}
+	//if ((m_transaction.address & ~1U) != m_address)
+	//{
+	//	return;
+	//}
 
 	// Send an ACK bit.
 	const int status = m_set_pin(m_sda_pin_idx, false);
+
+	m_clock++;
+	SDA_Pin_Change_Callback(false);
 
 	// Check for any possible errors.
 	if (status != 0)
@@ -555,29 +528,47 @@ void CDS3231::Render_Rtc()
 {
 	if (ImGui::Checkbox("Incorrect time", &m_incorrect_time) && m_incorrect_time)
 	{
-		if (m_incorrect_time) {
+		if (m_incorrect_time)
 			Incorrect_Time();
-			}
-		else {
+		else
 			Correct_Time();
-		}
+
+		Get_Current_Time();
 	}
 }
 
 void CDS3231::Check_Error()
 {
-	static std::random_device rd;
-	static std::mt19937 gen(rd());
-	std::uniform_real_distribution<float> dist(0.0f, 100);
+	if (m_error_probability > 0) {
+		m_logging_system->Info("Menim cas");
+		static std::random_device rd;
+		static std::mt19937 gen(rd());
+		std::uniform_real_distribution<float> dist(0.0f, 12);
 
-	float random_value = dist(gen);
+		float random_value = dist(gen);
 
-	if (random_value < m_error_probability || m_error_probability >= 100) {
-		int change = dist(gen);
-		m_second = (m_second + change) % 60;
-		m_minute = (m_minute + change) % 60;
-		m_hour = (m_hour + change) % 24;
-		m_month = (m_month + change) % 12;
+		if (random_value < m_error_probability || m_error_probability >= 100) {
+			int change = dist(gen);
+			if (change >= m_second)
+				m_second = 0;
+			else
+				m_second = (m_second - change) % 60;
+
+			if (change >= m_minute)
+				m_minute = 0;
+			else
+				m_minute = (m_minute - change) % 60;
+
+			if (change >= m_hour)
+				m_hour = 0;
+			else
+				m_hour = (m_hour - change) % 60;
+
+			if (change >= m_month)
+				m_month = 0;
+			else
+				m_month = (m_month - change) % 60;
+		}
 	}
 }
 
@@ -599,7 +590,7 @@ void CDS3231::Get_Current_Time()
 	m_month = local_time->tm_mon;
 	m_year = local_time->tm_year;
 
-	Check_Error();
+	//Check_Error();
 
 	m_output_fifo.clear();
 	m_output_fifo.push_back(m_second);

@@ -29,7 +29,7 @@ namespace zero_mate::gui
                                  bool& kernel_has_been_loaded,
                                  std::vector<std::shared_ptr<peripheral::IPeripheral>>& peripherals,
                                  const bool& cpu_running,
-                                 std::string& kernel_filename)
+                                 std::shared_ptr<std::string> kernel_filename)
     : m_bus{ bus }
     , m_cpu{ cpu }
     , m_source_codes{ source_codes }
@@ -174,7 +174,7 @@ namespace zero_mate::gui
         }
 
         // Reload the kernel.
-        Load_ELF_File(m_kernel_filename, true);
+        Load_ELF_File(m_kernel_filename->data(), true);
     }
 
     void CTop_Bar_Menu::Render_File_Browser()
@@ -250,7 +250,9 @@ namespace zero_mate::gui
                     m_cpu->Reset_Context();
                     m_cpu->Set_PC(pc);
                     m_kernel_has_been_loaded = true;
-                    m_kernel_filename = path;
+                    *m_kernel_filename = path;
+                    //m_kernel_filename = std::make_shared<std::string>(path);
+                    std::cout << "Nazacatku je kernel: " << m_kernel_filename->c_str() << std::endl;
                 }
 
                 // Add the disassembled ELF file into the collection of all loaded source codes.

@@ -521,7 +521,15 @@ namespace zero_mate::coprocessor::cp10
         }
         else
         {
-            m_bus->Write<std::uint32_t>(addr, m_regs[vd_idx].Get_Value_As<std::uint32_t>());
+            if (auto core = m_cpu_core.lock())
+            {
+                const std::uint32_t physical_addr = core->Convert_Virtual_Addr_To_Physical_Addr(addr, false);
+                m_bus->Write<std::uint32_t>(physical_addr, m_regs[vd_idx].Get_Value_As<std::uint32_t>());
+            }
+            else
+            {
+                m_bus->Write<std::uint32_t>(addr, m_regs[vd_idx].Get_Value_As<std::uint32_t>());
+            }
         }
     }
 

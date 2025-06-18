@@ -19,34 +19,34 @@
 #include "ssd1306_oled.hpp"
 
 CSSD1036_OLED::CSSD1036_OLED(const std::string& name,
-                             std::uint32_t address,
-                             std::uint32_t sda_pin_idx,
-                             std::uint32_t scl_pin_idx,
-                             zero_mate::IExternal_Peripheral::Read_GPIO_Pin_t read_pin,
-                             zero_mate::IExternal_Peripheral::Set_GPIO_Pin_t set_pin,
-                             zero_mate::utils::CLogging_System* logging_system)
-: m_name{ std::move(name) }
-, m_address{ address }
-, m_sda_pin_idx{ sda_pin_idx }
-, m_scl_pin_idx{ scl_pin_idx }
-, m_read_pin{ read_pin }
-, m_set_pin{ set_pin }
-, m_transaction{}
-, m_clock{ 0 }
-, m_sda_rising_edge_timestamp{ 0 }
-, m_scl_rising_edge_timestamp{ 0 }
-, m_sda_prev_state{ false }
-, m_scl_prev_state{ false }
-, m_sda_rising_edge{ false }
-, m_scl_rising_edge{ false }
-, m_logging_system{ logging_system }
-, m_ImGui_context{ nullptr }
-, m_display_on{ false }
-, m_processing_cmd{ true }
-, m_lock_incoming_data{ false }
-, m_y{ 0 }
-, m_x{ 0 }
-, m_y_ref{ 0 }
+    std::uint32_t address,
+    std::uint32_t sda_pin_idx,
+    std::uint32_t scl_pin_idx,
+    zero_mate::IExternal_Peripheral::Read_GPIO_Pin_t read_pin,
+    zero_mate::IExternal_Peripheral::Set_GPIO_Pin_t set_pin,
+    zero_mate::utils::CLogging_System* logging_system)
+    : m_name{ std::move(name) }
+    , m_address{ address }
+    , m_sda_pin_idx{ sda_pin_idx }
+    , m_scl_pin_idx{ scl_pin_idx }
+    , m_read_pin{ read_pin }
+    , m_set_pin{ set_pin }
+    , m_transaction{}
+    , m_clock{ 0 }
+    , m_sda_rising_edge_timestamp{ 0 }
+    , m_scl_rising_edge_timestamp{ 0 }
+    , m_sda_prev_state{ false }
+    , m_scl_prev_state{ false }
+    , m_sda_rising_edge{ false }
+    , m_scl_rising_edge{ false }
+    , m_logging_system{ logging_system }
+    , m_ImGui_context{ nullptr }
+    , m_display_on{ false }
+    , m_processing_cmd{ true }
+    , m_lock_incoming_data{ false }
+    , m_y{ 0 }
+    , m_x{ 0 }
+    , m_y_ref{ 0 }
 {
     Init_Pixels();
     Init_GPIO_Subscription();
@@ -119,8 +119,8 @@ void CSSD1036_OLED::Render_Display()
         {
             // Render the current pixel.
             draw_list->AddRectFilled({ v_min.x, v_min.y },
-                                     { v_min.x + Pixel_Size, v_min.y + Pixel_Size },
-                                     Get_Pixel_Color(y, x));
+                { v_min.x + Pixel_Size, v_min.y + Pixel_Size },
+                Get_Pixel_Color(y, x));
 
             // Move on to the next column.
             v_min.x += Pixel_Size;
@@ -153,26 +153,24 @@ void CSSD1036_OLED::GPIO_Subscription_Callback(std::uint32_t pin_idx)
     if (pin_idx == m_sda_pin_idx)
     {
         // Call SDA callback.
-        m_logging_system->Info("SDA_Pin_Change_Callback");
         SDA_Pin_Change_Callback(curr_pin_state);
     }
     else if (pin_idx == m_scl_pin_idx)
     {
         // Call SCL callback.
-        m_logging_system->Info("SCL_Pin_Change_Callback");
         SCL_Pin_Change_Callback(curr_pin_state);
     }
 
     // Check if the master has just sent a stop bit.
     // Definition of a stop bit: SDA goes high after SCL
     const bool stop_bit_detected = m_sda_rising_edge && m_scl_rising_edge &&
-                                   (m_sda_rising_edge_timestamp - m_scl_rising_edge_timestamp) == 1 &&
-        (m_transaction.state == NState_Machine::Data && (m_transaction.data_idx == 0 || m_transaction.data_idx == 7));
+        (m_sda_rising_edge_timestamp - m_scl_rising_edge_timestamp) == 1 &&
+        (m_transaction.state == NState_Machine::Data)
+        && (m_transaction.data_idx == 0 || m_transaction.data_idx == 7);
 
     // If a stop bit has just been detected, terminate the current transaction.
     if (stop_bit_detected)
     {
-        m_logging_system->Info(("Nastavuju Start_Bit: " + std::to_string(m_transaction.data_idx)).c_str());
         m_transaction.state = NState_Machine::Start_Bit;
         Received_Transaction_Callback();
     }
@@ -225,43 +223,37 @@ void CSSD1036_OLED::I2C_Update()
     switch (m_transaction.state)
     {
         // Receive the start bit.
-        case NState_Machine::Start_Bit:
-            m_logging_system->Info("Start_Bit");
-            I2C_Receive_Start_Bit();
-            break;
+    case NState_Machine::Start_Bit:
+        I2C_Receive_Start_Bit();
+        break;
 
         // Receive the slave's address.
-        case NState_Machine::Address:
-            m_logging_system->Info("Address");
-            I2C_Receive_Address();
-            break;
+    case NState_Machine::Address:
+        I2C_Receive_Address();
+        break;
 
         // Receive the RW bit.
-        case NState_Machine::RW:
-            m_logging_system->Info("RW");
-            I2C_Receive_RW_Bit();
-            break;
+    case NState_Machine::RW:
+        I2C_Receive_RW_Bit();
+        break;
 
         // Send the ACK_1 bit.
-        case NState_Machine::ACK_1:
-            m_logging_system->Info("ACK_1");
-            m_transaction.state = NState_Machine::Data;
-            break;
+    case NState_Machine::ACK_1:
+        m_transaction.state = NState_Machine::Data;
+        break;
 
         // Receive data (payload).
-        case NState_Machine::Data:
-            m_logging_system->Info("Data");
-            I2C_Receive_Data();
-            break;
+    case NState_Machine::Data:
+        I2C_Receive_Data();
+        break;
 
         // Send the ACK_2 bit.
-        case NState_Machine::ACK_2:
-            m_logging_system->Info("ACK_2");
-            // Move on to receiving another byte.
-            m_transaction.data = 0;
-            m_transaction.data_idx = Data_Length;
-            m_transaction.state = NState_Machine::Data;
-            break;
+    case NState_Machine::ACK_2:
+        // Move on to receiving another byte.
+        m_transaction.data = 0;
+        m_transaction.data_idx = Data_Length;
+        m_transaction.state = NState_Machine::Data;
+        break;
     }
 }
 
@@ -298,15 +290,13 @@ void CSSD1036_OLED::Updated_Type_Of_Processing_Data(std::uint8_t data)
 
 void CSSD1036_OLED::Received_Transaction_Callback()
 {
-    // Log_Received_Data();
+    Log_Received_Data();
 
     // If the FIFO is empty, there is nothing to do.
     if (m_fifo.empty())
     {
         return;
     }
-
-    m_logging_system->Info(("Prijimam jsem: " + std::to_string(m_fifo.size())).c_str());
 
     // Check what kind of that we will be processing.
     Updated_Type_Of_Processing_Data(m_fifo[0]);
@@ -374,108 +364,108 @@ void CSSD1036_OLED::Process_CMD(std::uint8_t data)
     switch (m_curr_cmd)
     {
         // Display off
-        case NCMD::Display_Off:
-            Display_Off_Callback();
-            break;
+    case NCMD::Display_Off:
+        Display_Off_Callback();
+        break;
 
         // Display on
-        case NCMD::Display_On:
-            Display_On_Callback();
-            break;
+    case NCMD::Display_On:
+        Display_On_Callback();
+        break;
 
         // Set display clock div ratio
-        case NCMD::Set_Display_Clock_Div_Ratio:
-            Set_Display_Clock_Div_Ratio_Callback(data);
-            break;
+    case NCMD::Set_Display_Clock_Div_Ratio:
+        Set_Display_Clock_Div_Ratio_Callback(data);
+        break;
 
         // Set multiplex ratio
-        case NCMD::Set_Multiplex_Ratio:
-            Set_Multiplex_Ratio(data);
-            break;
+    case NCMD::Set_Multiplex_Ratio:
+        Set_Multiplex_Ratio(data);
+        break;
 
         // Set display offset
-        case NCMD::Set_Display_Offset:
-            Set_Display_Offset(data);
-            break;
+    case NCMD::Set_Display_Offset:
+        Set_Display_Offset(data);
+        break;
 
         // Charge pump
-        case NCMD::Charge_Pump:
-            Charge_Pump_Callback(data);
-            break;
+    case NCMD::Charge_Pump:
+        Charge_Pump_Callback(data);
+        break;
 
         // Memory address mode
-        case NCMD::Memory_Addr_Mode:
-            Memory_Addr_Mode_Callback(data);
-            break;
+    case NCMD::Memory_Addr_Mode:
+        Memory_Addr_Mode_Callback(data);
+        break;
 
         // Com scan dir deccrement
-        case NCMD::Com_Scan_Dir_Dec:
-            Com_Scan_Dir_Dec_Callback();
-            break;
+    case NCMD::Com_Scan_Dir_Dec:
+        Com_Scan_Dir_Dec_Callback();
+        break;
 
         // Set com pins
-        case NCMD::Set_Com_Pins:
-            Set_Com_Pins_Callback(data);
-            break;
+    case NCMD::Set_Com_Pins:
+        Set_Com_Pins_Callback(data);
+        break;
 
         // Set contrast
-        case NCMD::Set_Contrast:
-            Set_Contrast_Callback(data);
-            break;
+    case NCMD::Set_Contrast:
+        Set_Contrast_Callback(data);
+        break;
 
         // Set precharge period
-        case NCMD::Set_Precharge_Period:
-            Set_Precharge_Period_Callback(data);
-            break;
+    case NCMD::Set_Precharge_Period:
+        Set_Precharge_Period_Callback(data);
+        break;
 
         // Set VCOM detect
-        case NCMD::Set_VCOM_Detect:
-            Set_VCOM_Detect_Callback(data);
-            break;
+    case NCMD::Set_VCOM_Detect:
+        Set_VCOM_Detect_Callback(data);
+        break;
 
         // Display all on resume
-        case NCMD::Display_All_On_Resume:
-            Display_All_On_Resume_Callback();
-            break;
+    case NCMD::Display_All_On_Resume:
+        Display_All_On_Resume_Callback();
+        break;
 
         // Normal display
-        case NCMD::Normal_Display:
-            Normal_Display_Callback();
-            break;
+    case NCMD::Normal_Display:
+        Normal_Display_Callback();
+        break;
 
         // Deactivate scroll
-        case NCMD::Deactivate_Scroll:
-            Deactivate_Scroll_Callback();
-            break;
+    case NCMD::Deactivate_Scroll:
+        Deactivate_Scroll_Callback();
+        break;
 
         // Set page address
-        case NCMD::Set_Page_Addr:
-            Set_Page_Addr_Callback(data);
-            break;
+    case NCMD::Set_Page_Addr:
+        Set_Page_Addr_Callback(data);
+        break;
 
         // Set column address
-        case NCMD::Set_Column_Addr:
-            Set_Column_Addr_Callback(data);
-            break;
+    case NCMD::Set_Column_Addr:
+        Set_Column_Addr_Callback(data);
+        break;
 
-        case NCMD::Display_All_On:
-        case NCMD::Inverted_Display:
-        case NCMD::Nop:
-        case NCMD::Horizontal_Scroll_Right:
-        case NCMD::Horizontal_Scroll_Left:
-        case NCMD::Horizontal_Scroll_Vrt_Right:
-        case NCMD::Horizontal_Scroll_Vrt_Left:
-        case NCMD::Activate_Scroll:
-        case NCMD::Set_Vrt_Scroll_Area:
-        case NCMD::Set_Upper_Column:
-        case NCMD::Set_Segment_Remap:
-            break;
+    case NCMD::Display_All_On:
+    case NCMD::Inverted_Display:
+    case NCMD::Nop:
+    case NCMD::Horizontal_Scroll_Right:
+    case NCMD::Horizontal_Scroll_Left:
+    case NCMD::Horizontal_Scroll_Vrt_Right:
+    case NCMD::Horizontal_Scroll_Vrt_Left:
+    case NCMD::Activate_Scroll:
+    case NCMD::Set_Vrt_Scroll_Area:
+    case NCMD::Set_Upper_Column:
+    case NCMD::Set_Segment_Remap:
+        break;
 
-        case NCMD::Command_Start:
-            [[fallthrough]];
-        case NCMD::Data_Start:
-        case NCMD::Data_Continue:
-            break;
+    case NCMD::Command_Start:
+        [[fallthrough]];
+    case NCMD::Data_Start:
+    case NCMD::Data_Continue:
+        break;
     }
 }
 
@@ -529,30 +519,30 @@ void CSSD1036_OLED::Set_Display_Offset(std::uint8_t data)
     switch (state)
     {
         // Lock incoming data.
-        case 0:
-            m_lock_incoming_data = true;
-            state = 1;
-            break;
+    case 0:
+        m_lock_incoming_data = true;
+        state = 1;
+        break;
 
         // Display offset 0.
-        case 1:
-            state = 2;
-            msg = "Display_Offset[0] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
-            break;
+    case 1:
+        state = 2;
+        msg = "Display_Offset[0] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
+        break;
 
         // Unlock incoming data.
         // Display offset 1.
-        case 2:
-            m_lock_incoming_data = false;
-            state = 0;
-            msg = "Display_Offset[1] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
-            break;
+    case 2:
+        m_lock_incoming_data = false;
+        state = 0;
+        msg = "Display_Offset[1] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
+        break;
 
-        default:
-            m_logging_system->Error("Error when setting Display_Offset");
-            break;
+    default:
+        m_logging_system->Error("Error when setting Display_Offset");
+        break;
     }
 }
 
@@ -579,30 +569,30 @@ void CSSD1036_OLED::Memory_Addr_Mode_Callback(std::uint8_t data)
     switch (state)
     {
         // Lock incoming data.
-        case 0:
-            m_lock_incoming_data = true;
-            state = 1;
-            break;
+    case 0:
+        m_lock_incoming_data = true;
+        state = 1;
+        break;
 
         // Memory_Addr_Mode 0.
-        case 1:
-            state = 2;
-            msg = "Memory_Addr_Mode[0] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
-            break;
+    case 1:
+        state = 2;
+        msg = "Memory_Addr_Mode[0] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
+        break;
 
         // Unlock incoming data.
         // Memory_Addr_Mode 1.
-        case 2:
-            m_lock_incoming_data = false;
-            state = 0;
-            msg = "Memory_Addr_Mode[1] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
-            break;
+    case 2:
+        m_lock_incoming_data = false;
+        state = 0;
+        msg = "Memory_Addr_Mode[1] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
+        break;
 
-        default:
-            m_logging_system->Error("Error when setting Memory_Addr_Mode");
-            break;
+    default:
+        m_logging_system->Error("Error when setting Memory_Addr_Mode");
+        break;
     }
 }
 
@@ -694,30 +684,30 @@ void CSSD1036_OLED::Set_Page_Addr_Callback(std::uint8_t data)
     switch (state)
     {
         // Lock incoming data.
-        case 0:
-            m_lock_incoming_data = true;
-            state = 1;
-            break;
+    case 0:
+        m_lock_incoming_data = true;
+        state = 1;
+        break;
 
         // Page address 0.
-        case 1:
-            state = 2;
-            msg = "Page_Addr[0] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
-            break;
+    case 1:
+        state = 2;
+        msg = "Page_Addr[0] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
+        break;
 
         // Unlock incoming data.
         // Page address 1.
-        case 2:
-            m_lock_incoming_data = false;
-            state = 0;
-            msg = "Page_Addr[1] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
-            break;
+    case 2:
+        m_lock_incoming_data = false;
+        state = 0;
+        msg = "Page_Addr[1] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
+        break;
 
-        default:
-            m_logging_system->Error("Error when setting Memory_Addr_Mode");
-            break;
+    default:
+        m_logging_system->Error("Error when setting Memory_Addr_Mode");
+        break;
     }
 }
 
@@ -729,36 +719,36 @@ void CSSD1036_OLED::Set_Column_Addr_Callback(std::uint8_t data)
     switch (state)
     {
         // Lock incoming data.
-        case 0:
-            m_lock_incoming_data = true;
-            state = 1;
-            break;
+    case 0:
+        m_lock_incoming_data = true;
+        state = 1;
+        break;
 
         // Column address 0.
-        case 1:
-            state = 2;
-            msg = "Column_Addr[0] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
+    case 1:
+        state = 2;
+        msg = "Column_Addr[0] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
 
-            // TODO use actual data received over I2C
-            m_y = 0;
-            m_x = 0;
-            m_y_ref = 0;
+        // TODO use actual data received over I2C
+        m_y = 0;
+        m_x = 0;
+        m_y_ref = 0;
 
-            break;
+        break;
 
         // Unlock incoming data.
         // Column address 1.
-        case 2:
-            m_lock_incoming_data = false;
-            state = 0;
-            msg = "Column_Addr[1] = " + std::to_string(static_cast<std::uint32_t>(data));
-            m_logging_system->Debug(msg.c_str());
-            break;
+    case 2:
+        m_lock_incoming_data = false;
+        state = 0;
+        msg = "Column_Addr[1] = " + std::to_string(static_cast<std::uint32_t>(data));
+        m_logging_system->Debug(msg.c_str());
+        break;
 
-        default:
-            m_logging_system->Error("Error when setting Memory_Addr_Mode");
-            break;
+    default:
+        m_logging_system->Error("Error when setting Memory_Addr_Mode");
+        break;
     }
 }
 
@@ -810,9 +800,14 @@ void CSSD1036_OLED::I2C_Receive_RW_Bit()
     // Read the RW bit.
     m_transaction.read = m_read_pin(m_sda_pin_idx);
 
-    // Send an ACK bit to the master device.
-    Send_ACK();
-    m_transaction.state = NState_Machine::ACK_1;
+    if (m_address != (m_transaction.address & ~1U)) {
+        m_transaction.state = NState_Machine::Data;
+        Send_ACK();
+    }
+    else {
+        Send_ACK();
+        m_transaction.state = NState_Machine::ACK_1;
+    }
 }
 
 void CSSD1036_OLED::I2C_Receive_Data()
@@ -829,13 +824,14 @@ void CSSD1036_OLED::I2C_Receive_Data()
     if (m_transaction.data_idx == 0)
     {
         // Store the data into the FIFO only if it is meant to be for us.
-        if (m_address == m_transaction.address)
+        if (m_address == (m_transaction.address & ~1U))
         {
             m_fifo.push_back(m_transaction.data);
         }
 
-        // Send an ACK bit to the master device.
-        Send_ACK();
+        m_clock++;
+        SDA_Pin_Change_Callback(false);
+
         m_transaction.state = NState_Machine::ACK_2;
     }
 }
@@ -843,13 +839,16 @@ void CSSD1036_OLED::I2C_Receive_Data()
 void CSSD1036_OLED::Send_ACK()
 {
     // Do NOT send an ACK bit to the master devices, unless they are talking to us.
-    if (m_transaction.address != m_address)
+    /*if (m_transaction.address != m_address)
     {
         return;
-    }
+    }*/
 
     // Send an ACK bit.
     const int status = m_set_pin(m_sda_pin_idx, false);
+
+    m_clock++;
+    SDA_Pin_Change_Callback(false);
 
     // Check for any possible errors.
     if (status != 0)
@@ -861,13 +860,13 @@ void CSSD1036_OLED::Send_ACK()
 extern "C"
 {
     zero_mate::IExternal_Peripheral::NInit_Status
-    Create_Peripheral(zero_mate::IExternal_Peripheral** peripheral,
-                      const char* const name,
-                      const std::uint32_t* const connection,
-                      std::size_t pin_count,
-                      zero_mate::IExternal_Peripheral::Set_GPIO_Pin_t set_pin,
-                      zero_mate::IExternal_Peripheral::Read_GPIO_Pin_t read_pin,
-                      zero_mate::utils::CLogging_System* logging_system)
+        Create_Peripheral(zero_mate::IExternal_Peripheral** peripheral,
+            const char* const name,
+            const std::uint32_t* const connection,
+            std::size_t pin_count,
+            zero_mate::IExternal_Peripheral::Set_GPIO_Pin_t set_pin,
+            zero_mate::IExternal_Peripheral::Read_GPIO_Pin_t read_pin,
+            zero_mate::utils::CLogging_System* logging_system)
     {
         // SDA, SCL, and address
         if (pin_count != 3)
@@ -878,12 +877,12 @@ extern "C"
         // Create an instance of an SSD1306 OLED display.
         // clang-format off
         *peripheral = new (std::nothrow) CSSD1036_OLED(name,
-                                                       connection[2], // Address
-                                                       connection[1], // SDA
-                                                       connection[0], // SCL
-                                                       read_pin,
-                                                       set_pin,
-                                                       logging_system);
+            connection[2], // Address
+            connection[1], // SDA
+            connection[0], // SCL
+            read_pin,
+            set_pin,
+            logging_system);
         // clang-format on
 
         // Make sure the creation was successful.

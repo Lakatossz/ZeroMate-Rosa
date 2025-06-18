@@ -49,7 +49,7 @@ nlohmann::json CMcp9808::Parse_JSON_File(const std::string& path)
 	// Make sure the file has been opened successfully.
 	if (!config_file)
 	{
-		m_logging_system->Error("Cannot load");
+		m_logging_system->Error(("Cannot load configuraiton " + path).c_str());
 
 		// Return an empty JSON object.
 		return {};
@@ -75,7 +75,7 @@ void CMcp9808::Initialize()
 {
 	nlohmann::json j = Parse_JSON_File(MCP9808_Config_File);
 
-	if (j.contains("configuration") &&
+	if (!j.empty() && j.contains("configuration") &&
 		j["configuration"].is_array() &&
 		!j["configuration"].empty())
 	{
@@ -162,7 +162,6 @@ void CMcp9808::GPIO_Subscription_Callback(std::uint32_t pin_idx)
 	// If a stop bit has just been detected, terminate the current transaction.
 	if (stop_bit_detected)
 	{
-		m_logging_system->Info(("Nastavuju Start_Bit: " + std::to_string(m_transaction.data_idx)).c_str());
 		m_transaction.state = NState_Machine::Start_Bit;
 		Received_Transaction_Callback();
 	}
@@ -228,56 +227,51 @@ void CMcp9808::I2C_Update()
 	{
 		// Receive the start bit.
 	case NState_Machine::Start_Bit:
-		m_logging_system->Info("Start_Bit");
 		I2C_Receive_Start_Bit();
 		break;
 
 		// Receive the slave's address.
 	case NState_Machine::Address:
-		m_logging_system->Info("Address");
 		I2C_Receive_Address();
 		break;
 
 		// Receive the RW bit.
 	case NState_Machine::RW:
-		m_logging_system->Info("RW");
 		I2C_Receive_RW_Bit();
 		break;
 
 		// Send the ACK_1 bit.
 	case NState_Machine::ACK_1:
-		m_logging_system->Info("ACK_1");
+		//Send_ACK();
 		m_transaction.state = NState_Machine::Recieve;
 		break;
 
 	case NState_Machine::ACK_1_Send:
-		m_logging_system->Info("ACK_1_Send");
 		m_transaction.state = NState_Machine::Send;
 		break;
 
 	case NState_Machine::Recieve:
-		m_logging_system->Info("Recieve");
 		I2C_Receive_Data();
 		break;
 
 		// Receive data (payload).
 	case NState_Machine::Send:
-		m_logging_system->Info("Send");
 		I2C_Send_Data();
 		break;
 
 	case NState_Machine::Receive_ACK:
-		m_logging_system->Info("Receive_ACK_2");
 		I2C_Receive_ACK_2();
 		break;
 
 		// Send the ACK_2 bit.
 	case NState_Machine::ACK_2:
-		m_logging_system->Info("ACK_2");
 		// Move on to receiving another byte.
 		m_transaction.data = 0;
 		m_transaction.data_idx = Data_Length;
 		m_transaction.state = NState_Machine::Recieve;
+
+		// Send an ACK bit to the master device.
+		Send_ACK();
 		break;
 	}
 }
@@ -305,8 +299,6 @@ void CMcp9808::I2C_Receive_Address()
 	if (m_transaction.addr_idx == 0)
 	{
 		// Move on to receiving the RW bit.
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
-		m_logging_system->Info("Nastavuju NState_Machine::RW");
 		m_transaction.state = NState_Machine::RW;
 	}
 }
@@ -316,19 +308,23 @@ void CMcp9808::I2C_Receive_RW_Bit()
 	// Read the RW bit.
 	m_transaction.read = m_read_pin(m_sda_pin_idx);
 
-	m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
+	std::cout << "Prisla mi adresa: " << static_cast<std::uint32_t>(m_transaction.address) << std::endl;
 
-	Send_ACK();
-
-	if (m_transaction.read && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
-		m_logging_system->Info("Nastavuju NState_Machine::Send");
+	if (((m_transaction.address & 0x01) != 0) && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
 		m_transaction.data = m_output_fifo[0];
 		m_transaction.data_idx = Data_Length;
 		m_transaction.length = sizeof(float);
 		m_transaction.state = NState_Machine::Send;
+		Send_ACK();
 	}
-	else
+	else if (((m_transaction.address & 0x01) != 0) && m_address != (m_transaction.address & ~1U)) {
+		m_transaction.state = NState_Machine::Recieve;
+		Send_ACK();
+	}
+	else {
+		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_1;
+	}
 }
 
 void CMcp9808::I2C_Receive_Data()
@@ -341,33 +337,19 @@ void CMcp9808::I2C_Receive_Data()
 		m_transaction.data |= (0b1U << m_transaction.data_idx);
 	}
 
-	m_logging_system->Info(std::to_string(m_transaction.data_idx).c_str());
-
 	// Have we read all 8 bits of the data yet?
 	if (m_transaction.data_idx == 0)
 	{
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
 		// Store the data into the FIFO only if it is meant to be for us.
 		if (m_address == (m_transaction.address & ~1U))
 		{
 			m_fifo.push_back(m_transaction.data);
-
-			// Send an ACK bit to the master device.
-			//Send_ACK();
 		}
 
 		if (!m_transaction.read && m_address == (m_transaction.address & ~1U)) {
-			//m_transaction.state = NState_Machine::ACK_2;
 			m_transaction.request_sended = true;
-			//m_transaction.data_idx = Data_Length;
-		}
-		else {
-			// Nemel by tady byt, protoze vsichni museji jit do ACK, ale posle ho jen ten, ci adresa to byla
-			//m_transaction.state = NState_Machine::Start_Bit;
 		}
 
-		// Send an ACK bit to the master device.
-		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_2;
 	}
 }
@@ -382,10 +364,6 @@ void CMcp9808::I2C_Send_Data()
 			// Get bit that is gonna be sent
 			bool bitToSend = (m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1;
 
-			m_logging_system->Info(("data: " + std::to_string(m_transaction.data)).c_str());
-			m_logging_system->Info(("data_idx: " + std::to_string(m_transaction.data_idx)).c_str());
-			m_logging_system->Info(("bitToSend: " + std::to_string((m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1)).c_str());
-
 			// Set SDA pin to the desired value
 			m_set_pin(m_sda_pin_idx, bitToSend);
 
@@ -396,12 +374,11 @@ void CMcp9808::I2C_Send_Data()
 				if (m_transaction.length > 0)
 				{
 					m_transaction.state = NState_Machine::Receive_ACK;
-					//m_output_fifo.erase(m_output_fifo.begin());
-					//m_transaction.data = m_output_fifo[0];
-					//m_transaction.data_idx = Data_Length;
 				}
 				else {
 					m_transaction.request_sended = false;
+					m_clock++;
+					SDA_Pin_Change_Callback(false);
 				}
 			}
 		}
@@ -504,21 +481,6 @@ void CMcp9808::Received_Transaction_Callback()
 	}
 }
 
-void CMcp9808::Process_Data(std::uint8_t data)
-{
-	if (m_fifo.size() > 2) {
-		uint16_t combined = (static_cast<uint16_t>(m_fifo[1]) << 8) | m_fifo[2];
-
-		m_logging_system->Info(std::to_string(combined).c_str());
-	}
-
-	// Go through individual bits of the received byte of data.
-	for (std::int8_t i = 0U; i < std::numeric_limits<std::uint8_t>::digits; ++i)
-	{
-		// TODO
-	}
-}
-
 void CMcp9808::Process_CMD(std::uint8_t data)
 {
 	// If the previous command locked the data, do not interpret the is as a command.
@@ -558,13 +520,16 @@ void CMcp9808::Init_Transaction()
 void CMcp9808::Send_ACK()
 {
 	// Do NOT send an ACK bit to the master devices, unless they are talking to us.
-	if ((m_transaction.address & ~1U) != m_address)
+	/*if ((m_transaction.address & ~1U) != m_address)
 	{
 		return;
-	}
+	}*/
 
 	// Send an ACK bit.
 	const int status = m_set_pin(m_sda_pin_idx, false);
+
+	m_clock++;
+	SDA_Pin_Change_Callback(false);
 
 	// Check for any possible errors.
 	if (status != 0)
@@ -591,6 +556,8 @@ void CMcp9808::I2C_Receive_ACK_2()
 
 void CMcp9808::Read_Temperature()
 {
+	std::cout << "Ctu teplotu\n";
+
 	if (m_higher_temperature) {
 		m_current_temperature = m_higher_value;
 	}
@@ -605,13 +572,14 @@ void CMcp9808::Read_Temperature()
 
 	ss << static_cast<double>(m_current_temperature);
 
-	m_logging_system->Info(("Current temperature: " + ss.str()).c_str());
+	m_logging_system->Info(("Temperature: " + ss.str()).c_str());
 
 	byte bytes[sizeof(float)];
 	memcpy(bytes, &m_current_temperature, sizeof(float));
 
 	m_output_fifo.clear();
 	for (int i = 0; i < sizeof(float); i++) {
+		std::cout << "bytes[i]: " << static_cast<std::uint32_t>(bytes[i]) << std::endl;
 		m_output_fifo.push_back(bytes[i]);
 	}
 }

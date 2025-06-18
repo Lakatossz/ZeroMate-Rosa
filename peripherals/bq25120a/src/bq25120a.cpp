@@ -17,6 +17,7 @@ CBq25120a::CBq25120a(const std::string& name,
 	, m_set_pin{ set_pin }
 	, m_transaction{}
 	, m_clock{ 0 }
+	, m_logging_system{ logging_system }
 	, m_sda_rising_edge_timestamp{ 0 }
 	, m_scl_rising_edge_timestamp{ 0 }
 	, m_sda_prev_state{ false }
@@ -25,7 +26,34 @@ CBq25120a::CBq25120a(const std::string& name,
 	, m_scl_rising_edge{ false }
 	, m_processing_cmd{ true }
 	, m_lock_incoming_data{ false }
-	, m_logging_system{ logging_system }
+	, m_full_capacity{ 0 }
+	, m_current_capacity{ 0 }
+	, m_capacity_downfall{ 0 }
+	, m_referenced_temperature { 0 }
+	, m_current_temperature{ 0 }
+	, m_higher_temperature_value { 0 }
+	, m_lower_temperature_value { 0 }
+	, m_higher_temperature{ false }
+	, m_lower_temperature{ false }
+	, m_referenced_charge{ 0 }
+	, m_current_charge{ 0 }
+	, m_higher_charge_value{ 0 }
+	, m_lower_charge_value{ 0 }
+	, m_higher_charge{ false }
+	, m_lower_charge{ false }
+	, m_referenced_voltage{ 0 }
+	, m_current_voltage{ 0 }
+	, m_higher_voltage_value{ 0 }
+	, m_lower_voltage_value{ 0 }
+	, m_higher_voltage{ false }
+	, m_lower_voltage{ false }
+	, m_referenced_current{ 0 }
+	, m_current_current{ 0 }
+	, m_higher_current_value{ 0 }
+	, m_lower_current_value{ 0 }
+	, m_higher_current{ false }
+	, m_lower_current{ false }
+	, m_error_occured{ false }
 {
 	Init_GPIO_Subscription();
 	Initialize();
@@ -46,7 +74,7 @@ nlohmann::json CBq25120a::Parse_JSON_File(const std::string& path)
 	// Make sure the file has been opened successfully.
 	if (!config_file)
 	{
-		m_logging_system->Error("Cannot load ");
+		m_logging_system->Error(("Cannot load configuraiton " + path).c_str());
 
 		// Return an empty JSON object.
 		return {};
@@ -71,8 +99,7 @@ nlohmann::json CBq25120a::Parse_JSON_File(const std::string& path)
 void CBq25120a::Set_Parameter(nlohmann::json j, std::string name, float& variable) {
 	if (j["configuration"][0].contains(name) &&
 		j["configuration"][0][name].is_array() &&
-		!j["configuration"][0][name].empty() &&
-		j["configuration"][0][name][0].is_number_unsigned())
+		!j["configuration"][0][name].empty())
 	{
 		variable = j["configuration"][0][name][0].get<float>();
 	}
@@ -81,8 +108,7 @@ void CBq25120a::Set_Parameter(nlohmann::json j, std::string name, float& variabl
 void CBq25120a::Set_Parameter_And_Referenced(nlohmann::json j, std::string name, float& referenced, float& variable) {
 	if (j["configuration"][0].contains(name) &&
 		j["configuration"][0][name].is_array() &&
-		!j["configuration"][0][name].empty() &&
-		j["configuration"][0][name][0].is_number_unsigned())
+		!j["configuration"][0][name].empty())
 	{
 		referenced = j["configuration"][0][name][0].get<float>();
 		variable = referenced;
@@ -93,7 +119,7 @@ void CBq25120a::Initialize()
 {
 	nlohmann::json j = Parse_JSON_File(Bq25120a_Config_File);
 
-	if (j.contains("configuration") &&
+	if (!j.empty() && j.contains("configuration") &&
 		j["configuration"].is_array() &&
 		!j["configuration"].empty())
 	{
@@ -230,7 +256,6 @@ void CBq25120a::GPIO_Subscription_Callback([[maybe_unused]] std::uint32_t pin_id
 	// If a stop bit has just been detected, terminate the current transaction.
 	if (stop_bit_detected)
 	{
-		m_logging_system->Info(("Nastavuju Start_Bit: " + std::to_string(m_transaction.data_idx)).c_str());
 		m_transaction.state = NState_Machine::Start_Bit;
 		Received_Transaction_Callback();
 	}
@@ -249,56 +274,51 @@ void CBq25120a::I2C_Update()
 	{
 		// Receive the start bit.
 	case NState_Machine::Start_Bit:
-		m_logging_system->Info("Start_Bit");
 		I2C_Receive_Start_Bit();
 		break;
 
 		// Receive the slave's address.
 	case NState_Machine::Address:
-		m_logging_system->Info("Address");
 		I2C_Receive_Address();
 		break;
 
 		// Receive the RW bit.
 	case NState_Machine::RW:
-		m_logging_system->Info("RW");
 		I2C_Receive_RW_Bit();
 		break;
 
 		// Send the ACK_1 bit.
 	case NState_Machine::ACK_1:
-		m_logging_system->Info("ACK_1");
+		//Send_ACK();
 		m_transaction.state = NState_Machine::Recieve;
 		break;
 
 	case NState_Machine::ACK_1_Send:
-		m_logging_system->Info("ACK_1_Send");
 		m_transaction.state = NState_Machine::Send;
 		break;
 
 	case NState_Machine::Recieve:
-		m_logging_system->Info("Recieve");
 		I2C_Receive_Data();
 		break;
 
 		// Receive data (payload).
 	case NState_Machine::Send:
-		m_logging_system->Info("Send");
 		I2C_Send_Data();
 		break;
 
 	case NState_Machine::Receive_ACK:
-		m_logging_system->Info("Receive_ACK_2");
 		I2C_Receive_ACK_2();
 		break;
 
 		// Send the ACK_2 bit.
 	case NState_Machine::ACK_2:
-		m_logging_system->Info("ACK_2");
 		// Move on to receiving another byte.
 		m_transaction.data = 0;
 		m_transaction.data_idx = Data_Length;
 		m_transaction.state = NState_Machine::Recieve;
+
+		// Send an ACK bit to the master device.
+		Send_ACK();
 		break;
 	}
 }
@@ -326,8 +346,6 @@ void CBq25120a::I2C_Receive_Address()
 	if (m_transaction.addr_idx == 0)
 	{
 		// Move on to receiving the RW bit.
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
-		m_logging_system->Info("Nastavuju NState_Machine::RW");
 		m_transaction.state = NState_Machine::RW;
 	}
 }
@@ -337,19 +355,23 @@ void CBq25120a::I2C_Receive_RW_Bit()
 	// Read the RW bit.
 	m_transaction.read = m_read_pin(m_sda_pin_idx);
 
-	m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
+	std::cout << "Prisla mi adresa: " << static_cast<std::uint32_t>(m_transaction.address) << std::endl;
 
-	Send_ACK();
-
-	if (m_transaction.read && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
-		m_logging_system->Info("Nastavuju NState_Machine::Send");
+	if (((m_transaction.address & 0x01) != 0) && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
 		m_transaction.data = m_output_fifo[0];
 		m_transaction.data_idx = Data_Length;
 		m_transaction.length = sizeof(float);
 		m_transaction.state = NState_Machine::Send;
+		Send_ACK();
 	}
-	else
+	else if (((m_transaction.address & 0x01) != 0) && m_address != (m_transaction.address & ~1U)) {
+		m_transaction.state = NState_Machine::Recieve;
+		Send_ACK();
+	}
+	else {
+		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_1;
+	}
 }
 
 void CBq25120a::I2C_Receive_Data()
@@ -362,33 +384,19 @@ void CBq25120a::I2C_Receive_Data()
 		m_transaction.data |= (0b1U << m_transaction.data_idx);
 	}
 
-	m_logging_system->Info(std::to_string(m_transaction.data_idx).c_str());
-
 	// Have we read all 8 bits of the data yet?
 	if (m_transaction.data_idx == 0)
 	{
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
 		// Store the data into the FIFO only if it is meant to be for us.
 		if (m_address == (m_transaction.address & ~1U))
 		{
 			m_fifo.push_back(m_transaction.data);
-
-			// Send an ACK bit to the master device.
-			//Send_ACK();
 		}
 
 		if (!m_transaction.read && m_address == (m_transaction.address & ~1U)) {
-			//m_transaction.state = NState_Machine::ACK_2;
 			m_transaction.request_sended = true;
-			//m_transaction.data_idx = Data_Length;
-		}
-		else {
-			// Nemel by tady byt, protoze vsichni museji jit do ACK, ale posle ho jen ten, ci adresa to byla
-			//m_transaction.state = NState_Machine::Start_Bit;
 		}
 
-		// Send an ACK bit to the master device.
-		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_2;
 	}
 }
@@ -403,10 +411,6 @@ void CBq25120a::I2C_Send_Data()
 			// Get bit that is gonna be sent
 			bool bitToSend = (m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1;
 
-			m_logging_system->Info(("data: " + std::to_string(m_transaction.data)).c_str());
-			m_logging_system->Info(("data_idx: " + std::to_string(m_transaction.data_idx)).c_str());
-			m_logging_system->Info(("bitToSend: " + std::to_string((m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1)).c_str());
-
 			// Set SDA pin to the desired value
 			m_set_pin(m_sda_pin_idx, bitToSend);
 
@@ -417,12 +421,11 @@ void CBq25120a::I2C_Send_Data()
 				if (m_transaction.length > 0)
 				{
 					m_transaction.state = NState_Machine::Receive_ACK;
-					//m_output_fifo.erase(m_output_fifo.begin());
-					//m_transaction.data = m_output_fifo[0];
-					//m_transaction.data_idx = Data_Length;
 				}
 				else {
 					m_transaction.request_sended = false;
+					m_clock++;
+					SDA_Pin_Change_Callback(false);
 				}
 			}
 		}
@@ -540,13 +543,16 @@ void CBq25120a::Init_Transaction()
 void CBq25120a::Send_ACK()
 {
 	// Do NOT send an ACK bit to the master devices, unless they are talking to us.
-	if (m_transaction.address != m_address)
-	{
-		return;
-	}
+	//if ((m_transaction.address & ~1U) != m_address)
+	//{
+	//	return;
+	//}
 
 	// Send an ACK bit.
 	const int status = m_set_pin(m_sda_pin_idx, false);
+
+	m_clock++;
+	SDA_Pin_Change_Callback(false);
 
 	// Check for any possible errors.
 	if (status != 0)
@@ -575,8 +581,6 @@ void CBq25120a::Process_Data(std::uint8_t data)
 {
 	if (m_fifo.size() > 2) {
 		uint16_t combined = (static_cast<uint16_t>(m_fifo[1]) << 8) | m_fifo[2];
-
-		m_logging_system->Info(std::to_string(combined).c_str());
 	}
 
 	// Go through individual bits of the received byte of data.
@@ -594,8 +598,6 @@ void CBq25120a::Process_CMD(std::uint8_t data)
 	{
 		m_curr_cmd = static_cast<NCMD>(data);
 	}
-
-	m_logging_system->Info(("NCMD: " + std::to_string(data)).c_str());
 
 	// Process the current command.
 	switch (m_curr_cmd)
@@ -617,23 +619,18 @@ void CBq25120a::Process_CMD(std::uint8_t data)
 		Read_Temperature();
 		break;
 	case NCMD::Read_Errors:
-		m_logging_system->Info("Ctu chyby baterie");
 		Read_Errors();
 		break;
 	case NCMD::Read_Info:
-		m_logging_system->Info("Ctu informace o baterii");
 		Read_Info();
 		break;
 	case NCMD::Write_Reset:
-		m_logging_system->Info("Resetuji baterii");
 		Write_Reset();
 		break;
 	case NCMD::Write_Init:
-		m_logging_system->Info("Inicializuji baterii");
 		Write_Init();
 		break;
 	case NCMD::Write_Safe:
-		m_logging_system->Info("Prepinam baterii do bezpecneho rezimu");
 		Write_Safe();
 		break;
 	case NCMD::Command_Start:
@@ -673,8 +670,8 @@ void CBq25120a::Render_Information() const
 	ImGui::Text("I2C addr = 0x%X (%d dec)", m_address, m_address);
 	ImGui::Text("Full capacity: %f mAh", m_full_capacity);
 	ImGui::Text("Current charge: %f %%", m_current_charge);
-	ImGui::Text("Current voltage: %f V", static_cast<float>(m_current_voltage / 1000));
-	ImGui::Text("Current current: %f A", static_cast<float>(m_current_current / 1000));
+	ImGui::Text("Current voltage: %f V", m_current_voltage);
+	ImGui::Text("Current current: %f A", m_current_current);
 	ImGui::Text("Current temperature: %f C", m_current_temperature);
 }
 
@@ -875,7 +872,6 @@ void CBq25120a::Control_Loop()
 
 		if ((m_current_capacity - m_capacity_downfall) > 0) {
 			m_current_capacity -= m_capacity_downfall;
-			m_logging_system->Info(std::to_string(m_current_charge).c_str());
 			m_current_charge = 100 * m_current_capacity / m_full_capacity;
 		}
 		else {

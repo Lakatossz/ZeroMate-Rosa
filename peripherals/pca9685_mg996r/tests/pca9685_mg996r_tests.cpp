@@ -26,12 +26,12 @@ public:
         current_instance = this; // Správné nastavení instance pro pøístup k èlenským funkcím
     }
 
-    std::uint8_t Read() {
+    std::uint8_t Read(std::uint32_t address) {
         char buffer[8] = {};
 
         char s;
 
-        std::uint32_t read_address = m_address | 1;
+        std::uint32_t read_address = address | 1;
 
         // Nastaveni I2C adresy senzoru v BSC
         m_bsc->Write(static_cast<uint32_t>(peripheral::IBSC::NRegister::Slave_Address),
@@ -73,7 +73,7 @@ public:
         return static_cast<std::uint8_t>(buffer[0]);
     }
 
-    void Write(std::uint32_t command, char* data, std::uint32_t data_size) {
+    void Write(std::uint32_t command, char* data, std::uint32_t data_size, std::uint32_t address) {
         char s;
         uint32_t control_reg_value = (1 << 4);
         char* data_to_write = reinterpret_cast<char*>(&control_reg_value);
@@ -84,7 +84,7 @@ public:
 
         // Nastavení I2C adresy senzoru v BSC
         m_bsc->Write(static_cast<uint32_t>(peripheral::IBSC::NRegister::Slave_Address),
-            reinterpret_cast<const char*>(&m_address), sizeof(uint32_t));
+            reinterpret_cast<const char*>(&address), sizeof(uint32_t));
 
         // Nastaveni delky dat, ktere budu zapisovat
         std::uint32_t size = 2 + data_size;
@@ -156,8 +156,14 @@ protected:
     std::shared_ptr<zero_mate::peripheral::CGPIO_Manager_Mock> m_gpio;
     std::unique_ptr<peripheral::Mock_BSC> m_bsc;
     std::unique_ptr<CPca9685_Mg996r> m_motor;
+    std::unique_ptr<CPca9685_Mg996r> m_motor1;
+    std::unique_ptr<CPca9685_Mg996r> m_motor2;
+    std::unique_ptr<CPca9685_Mg996r> m_motor3;
     utils::CLogging_System* m_logging_system;
     std::uint32_t m_address = 0x48;
+    std::uint32_t m_address_1 = 0x4A;
+    std::uint32_t m_address_2 = 0x4C;
+    std::uint32_t m_address_3 = 0x4E;
     std::uint32_t m_sda_pin = 2;
     std::uint32_t m_scl_pin = 3;
 };
@@ -308,13 +314,14 @@ TEST_F(Test_Pca9685_Mg996r, Push_Forward_Once) {
         buffer[0] = static_cast<char>(high);
         buffer[1] = static_cast<char>(low);
 
-        Write(0x81, buffer, 2);
+        Write(0x81, buffer, 2, m_address);
+
+        Write(0xA6, "", 0, m_address);
+        correct = Read(m_address) == 0;
     }
     else {
         correct = false;
     }
-    Write(0xA6, "", 0);
-    correct = Read() == 0;
 
     EXPECT_TRUE(correct);
 }
@@ -362,9 +369,9 @@ TEST_F(Test_Pca9685_Mg996r, Push_Forward_Many_Times) {
         buffer[1] = static_cast<char>(low);
 
         for (int i = 0; i < 10; ++i) {
-            Write(0x81, buffer, 2);
-            Write(0xA6, "", 0);
-            correct = Read() == 0;
+            Write(0x81, buffer, 2, m_address);
+            Write(0xA6, "", 0, m_address);
+            correct = Read(m_address) == 0;
         }
     }
     else {
@@ -416,14 +423,14 @@ TEST_F(Test_Pca9685_Mg996r, Push_Forward_Once_With_Error) {
         buffer[0] = static_cast<char>(high);
         buffer[1] = static_cast<char>(low);
 
-        Write(0x81, buffer, 2);
+        Write(0x81, buffer, 2, m_address);
+
+        Write(0xA6, "", 0, m_address);
+        correct = Read(m_address) == 1;
     }
     else {
         correct = false;
     }
-
-    Write(0xA6, "", 0);
-    correct = Read() == 1;
 
     EXPECT_TRUE(correct);
 }
@@ -470,13 +477,14 @@ TEST_F(Test_Pca9685_Mg996r, Push_Backward_Once) {
         buffer[0] = static_cast<char>(high);
         buffer[1] = static_cast<char>(low);
 
-        Write(0xA4, buffer, 2);
+        Write(0xA4, buffer, 2, m_address);
+
+        Write(0xA6, "", 0, m_address);
+        correct = Read(m_address) == 0;
     }
     else {
         correct = false;
     }
-    Write(0xA6, "", 0);
-    correct = Read() == 0;
 
     EXPECT_TRUE(correct);
 }
@@ -524,9 +532,9 @@ TEST_F(Test_Pca9685_Mg996r, Push_Backward_Many_Times) {
         buffer[1] = static_cast<char>(low);
 
         for (int i = 0; i < 10; ++i) {
-            Write(0xA4, buffer, 2);
-            Write(0xA6, "", 0);
-            correct = Read() == 0;
+            Write(0xA4, buffer, 2, m_address);
+            Write(0xA6, "", 0, m_address);
+            correct = Read(m_address) == 0;
         }
     }
     else {
@@ -578,14 +586,14 @@ TEST_F(Test_Pca9685_Mg996r, Push_Backward_Once_With_Error) {
         buffer[0] = static_cast<char>(high);
         buffer[1] = static_cast<char>(low);
 
-        Write(0xA4, buffer, 2);
+        Write(0xA4, buffer, 2, m_address);
+
+        Write(0xA6, "", 0, m_address);
+        correct = Read(m_address) == 1;
     }
     else {
         correct = false;
     }
-
-    Write(0xA6, "", 0);
-    correct = Read() == 1;
 
     EXPECT_TRUE(correct);
 }
@@ -632,14 +640,15 @@ TEST_F(Test_Pca9685_Mg996r, Push_Forward_And_Backward_Once) {
         buffer[0] = static_cast<char>(high);
         buffer[1] = static_cast<char>(low);
 
-        Write(0x81, buffer, 2);
-        Write(0xA4, buffer, 2);
+        Write(0x81, buffer, 2, m_address);
+        Write(0xA4, buffer, 2, m_address);
+
+        Write(0xA6, "", 0, m_address);
+        correct = Read(m_address) == 0;
     }
     else {
         correct = false;
     }
-    Write(0xA6, "", 0);
-    correct = Read() == 0;
 
     EXPECT_TRUE(correct);
 }
@@ -687,11 +696,117 @@ TEST_F(Test_Pca9685_Mg996r, Push_Forward_And_Backward_Many_Times) {
         buffer[1] = static_cast<char>(low);
 
         for (int i = 0; i < 10; ++i) {
-            Write(0x81, buffer, 2);
-            Write(0xA4, buffer, 2);
-            Write(0xA6, "", 0);
-            correct = Read() == 0;
+            Write(0x81, buffer, 2, m_address);
+            Write(0xA4, buffer, 2, m_address);
+            Write(0xA6, "", 0, m_address);
+            correct = Read(m_address) == 0;
         }
+    }
+    else {
+        correct = false;
+    }
+
+    EXPECT_TRUE(correct);
+}
+
+TEST_F(Test_Pca9685_Mg996r, Push_Forward_And_Backward_Once_With_Other_I2C_Devices) {
+    bool correct = true;
+
+    std::string config_string = R"({
+          "configuration": [
+            {
+              "patient_library": [ "C:\\Users\\rosaj\\Source\\Repos\\ZeroMate\\peripherals\\cgm\\src\\patient\\simple-patient.dll" ],
+              "error_chance": [ 0 ]
+            }
+          ]
+        })";
+
+    std::ofstream("peripherals/pca9685_mg996r_config.json") << config_string;
+
+    try {
+        // Vytvoøení instance motoru (I2C slave)
+        m_motor = std::make_unique<CPca9685_Mg996r>(
+            "TestSensor",
+            m_address,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_motor1 = std::make_unique<CPca9685_Mg996r>(
+            "TestSensor1",
+            m_address_1,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_motor2 = std::make_unique<CPca9685_Mg996r>(
+            "TestSensor2",
+            m_address_2,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+
+        m_motor3 = std::make_unique<CPca9685_Mg996r>(
+            "TestSensor3",
+            m_address_3,
+            m_sda_pin,
+            m_scl_pin,
+            &m_gpio->Static_Read_GPIO_Pin,
+            &m_gpio->Static_Set_GPIO_Pin,
+            m_logging_system
+        );
+    }
+    catch (const std::exception& e) {
+        correct = false;
+    }
+
+    if (m_motor != nullptr && m_gpio != nullptr && m_bsc != nullptr) {
+        m_gpio->Add_External_Peripheral(m_motor.get());
+        m_gpio->Add_External_Peripheral(m_motor1.get());
+        m_gpio->Add_External_Peripheral(m_motor2.get());
+        m_gpio->Add_External_Peripheral(m_motor3.get());
+
+        std::uint16_t steps = 10;
+
+        std::uint8_t high = (steps >> 8) & 0xFF;
+        std::uint8_t low = steps & 0xFF;
+
+        char buffer[2];
+        buffer[0] = static_cast<char>(high);
+        buffer[1] = static_cast<char>(low);
+
+        Write(0x81, buffer, 2, m_address);
+        Write(0xA4, buffer, 2, m_address);
+
+        Write(0xA6, "", 0, m_address);
+        correct = Read(m_address) == 0;
+
+        Write(0x81, buffer, 2, m_address_1);
+        Write(0xA4, buffer, 2, m_address_1);
+
+        Write(0xA6, "", 0, m_address_1);
+        correct = Read(m_address_1) == 0;
+
+        Write(0x81, buffer, 2, m_address_2);
+        Write(0xA4, buffer, 2, m_address_2);
+
+        Write(0xA6, "", 0, m_address_2);
+        correct = Read(m_address_2) == 0;
+
+        Write(0x81, buffer, 2, m_address_3);
+        Write(0xA4, buffer, 2, m_address_3);
+
+        Write(0xA6, "", 0, m_address_3);
+        correct = Read(m_address_3) == 0;
     }
     else {
         correct = false;

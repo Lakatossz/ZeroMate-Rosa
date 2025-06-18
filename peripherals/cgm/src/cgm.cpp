@@ -42,11 +42,20 @@ CCgm::CCgm(const std::string name,
 	, m_lock_incoming_data{ false }
 	, m_higher_glycemia{ false }
 	, m_lower_glycemia{ false }
+	, m_patient_idx{ 0 }
 	, m_logging_system{ logging_system }
 {
 	Init_GPIO_Subscription();
 	if (!Initialize())
 		throw std::runtime_error("Inicialization error");
+}
+
+CCgm::~CCgm()
+{
+	if (m_patient_idx >= 0)
+		Terminate_Patient(m_patient_idx);
+
+	file.close();
 }
 
 nlohmann::json CCgm::Parse_JSON_File(const std::string& path)
@@ -57,7 +66,7 @@ nlohmann::json CCgm::Parse_JSON_File(const std::string& path)
 	// Make sure the file has been opened successfully.
 	if (!config_file)
 	{
-		m_logging_system->Error("Cannot load");
+		m_logging_system->Error(("Cannot load configuraiton " + path).c_str());
 
 		// Return an empty JSON object.
 		return {};
@@ -83,7 +92,7 @@ bool CCgm::Initialize()
 {
 	nlohmann::json j = Parse_JSON_File(Cgm_Config_File);
 
-	if (j.contains("configuration") &&
+	if (!j.empty() && j.contains("configuration") &&
 		j["configuration"].is_array() &&
 		!j["configuration"].empty())
 	{
@@ -99,9 +108,16 @@ bool CCgm::Initialize()
 			}
 
 			m_patient_idx = Create_Patient();
+
+			m_logging_system->Info(("Patient_id: " + std::to_string(m_patient_idx)).c_str());
 			if (m_patient_idx < 0) {
 				m_logging_system->Error("Failed to create patient");
 				return false;
+			}
+			// Docasne reseni - pocita se s tim, ze bude jenom jeden pacient
+			else if (m_patient_idx > 0) {
+				Terminate_Patient(m_patient_idx);
+				m_patient_idx = 0;
 			}
 		}
 		else
@@ -149,12 +165,9 @@ bool CCgm::Initialize()
 		return false;
 	}
 
-	return true;
-}
+	file = std::ofstream("patient_output_log.txt", std::ios::out);
 
-CCgm::~CCgm()
-{
-	Terminate_Patient(m_patient_idx);
+	return true;
 }
 
 void CCgm::GPIO_Subscription_Callback([[maybe_unused]] std::uint32_t pin_idx)
@@ -166,22 +179,19 @@ void CCgm::GPIO_Subscription_Callback([[maybe_unused]] std::uint32_t pin_idx)
 	if (pin_idx == m_sda_pin_idx)
 	{
 		// Call SDA callback.
-		m_logging_system->Info("SDA_Pin_Change_Callback");
 		SDA_Pin_Change_Callback(curr_pin_state);
 	}
 	else if (pin_idx == m_scl_pin_idx)
 	{
 		// Call SCL callback.
-		m_logging_system->Info("SCL_Pin_Change_Callback");
 		SCL_Pin_Change_Callback(curr_pin_state);
-	} else 
-		m_logging_system->Info("Ani jedno");
+	}
 
 	// Check if the master has just sent a stop bit.
 	// Definition of a stop bit: SDA goes high after SCL
 	const bool stop_bit_detected = m_sda_rising_edge && m_scl_rising_edge &&
 		(m_sda_rising_edge_timestamp - m_scl_rising_edge_timestamp) == 1 &&
-		((m_transaction.state == NState_Machine::Recieve && (m_transaction.data_idx == 0 || m_transaction.data_idx == 7)) ||
+		(m_transaction.state == NState_Machine::Recieve && (m_transaction.data_idx == 0 || m_transaction.data_idx == 7) ||
 			(m_transaction.state == NState_Machine::Send &&
 				m_transaction.length == 0 &&
 				m_transaction.data_idx == 0));
@@ -189,203 +199,8 @@ void CCgm::GPIO_Subscription_Callback([[maybe_unused]] std::uint32_t pin_idx)
 	// If a stop bit has just been detected, terminate the current transaction.
 	if (stop_bit_detected)
 	{
-		m_logging_system->Info(("Nastavuju Start_Bit: " + std::to_string(m_transaction.data_idx)).c_str());
 		m_transaction.state = NState_Machine::Start_Bit;
 		Received_Transaction_Callback();
-	}
-}
-
-void CCgm::Init_GPIO_Subscription()
-{
-	m_gpio_subscription.insert(m_sda_pin_idx);
-	m_gpio_subscription.insert(m_scl_pin_idx);
-}
-
-void CCgm::I2C_Update()
-{
-	// I2C state machine
-	switch (m_transaction.state)
-	{
-		// Receive the start bit.
-	case NState_Machine::Start_Bit:
-		m_logging_system->Info("Start_Bit");
-		std::cout << "cgm Start_Bit\n";
-		I2C_Receive_Start_Bit();
-		break;
-
-		// Receive the slave's address.
-	case NState_Machine::Address:
-		m_logging_system->Info("Address");
-		std::cout << "cgm Address\n";
-		I2C_Receive_Address();
-		break;
-
-		// Receive the RW bit.
-	case NState_Machine::RW:
-		m_logging_system->Info("RW");
-		std::cout << "cgm RW\n";
-		I2C_Receive_RW_Bit();
-		break;
-
-		// Send the ACK_1 bit.
-	case NState_Machine::ACK_1:
-		m_logging_system->Info("ACK_1");
-		std::cout << "cgm ACK_1\n";
-		m_transaction.state = NState_Machine::Recieve;
-		break;
-
-	case NState_Machine::ACK_1_Send:
-		m_logging_system->Info("ACK_1_Send");
-		std::cout << "cgm ACK_1_Send\n";
-		m_transaction.state = NState_Machine::Send;
-		break;
-
-	case NState_Machine::Recieve:
-		m_logging_system->Info("Recieve");
-		std::cout << "cgm Recieve\n";
-		I2C_Receive_Data();
-		break;
-
-		// Receive data (payload).
-	case NState_Machine::Send:
-		m_logging_system->Info("Send");
-		std::cout << "cgm Send\n";
-		I2C_Send_Data();
-		break;
-
-	case NState_Machine::Receive_ACK:
-		m_logging_system->Info("Receive_ACK_2");
-		std::cout << "cgm Receive_ACK_2\n";
-		I2C_Receive_ACK_2();
-		break;
-
-		// Send the ACK_2 bit.
-	case NState_Machine::ACK_2:
-		m_logging_system->Info("ACK_2");
-		std::cout << "cgm ACK_2\n";
-		// Move on to receiving another byte.
-		m_transaction.data = 0;
-		m_transaction.data_idx = Data_Length;
-		m_transaction.state = NState_Machine::Recieve;
-		break;
-	}
-}
-
-void CCgm::I2C_Receive_Start_Bit()
-{
-	if (!m_read_pin(m_sda_pin_idx))
-	{
-		Init_Transaction();
-		m_transaction.state = NState_Machine::Address;
-	}
-}
-
-void CCgm::I2C_Receive_Address()
-{
-	--m_transaction.addr_idx;
-
-	// Read the state of the SDA pin and update the address.
-	if (m_read_pin(m_sda_pin_idx))
-	{
-		m_transaction.address |= (0b1U << m_transaction.addr_idx);
-	}
-
-	// Have we read all bits of the address yet?
-	if (m_transaction.addr_idx == 0)
-	{
-		m_logging_system->Info("Nastavuju NState_Machine::RW");
-		// Move on to receiving the RW bit.
-		m_transaction.state = NState_Machine::RW;
-	}
-}
-
-void CCgm::I2C_Receive_RW_Bit()
-{
-	// Read the RW bit.
-	m_transaction.read = m_read_pin(m_sda_pin_idx);
-
-	if (m_transaction.read && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
-		m_logging_system->Info("Nastavuju NState_Machine::Send");
-		m_transaction.data = m_output_fifo[0];
-		m_transaction.data_idx = Data_Length;
-		m_transaction.length = sizeof(float);
-		m_transaction.state = NState_Machine::Send;
-		Send_ACK();
-	}
-	else {
-		Send_ACK();
-		m_logging_system->Info("Nastavuju NState_Machine::ACK_1");
-		m_transaction.state = NState_Machine::ACK_1;
-	}
-}
-
-void CCgm::I2C_Receive_Data()
-{
-	--m_transaction.data_idx;
-
-	// Read the state of the SDA pin and update the data (receiving byte).
-	if (m_read_pin(m_sda_pin_idx))
-	{
-		m_transaction.data |= (0b1U << m_transaction.data_idx);
-	}
-
-	m_logging_system->Info(std::to_string(m_transaction.data_idx).c_str());
-
-	// Have we read all 8 bits of the data yet?
-	if (m_transaction.data_idx == 0)
-	{
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
-		// Store the data into the FIFO only if it is meant to be for us.
-		if (m_address == (m_transaction.address & ~1U))
-		{
-			m_fifo.push_back(m_transaction.data);
-		}
-
-		if (!m_transaction.read && m_address == (m_transaction.address & ~1U)) {
-			m_transaction.request_sended = true;
-		}
-		else {
-		}
-
-		// Send an ACK bit to the master device.
-		Send_ACK();
-		m_transaction.state = NState_Machine::ACK_2;
-	}
-}
-
-void CCgm::I2C_Send_Data()
-{
-	if (m_transaction.data_idx > 0) {
-		--m_transaction.data_idx;
-		// Store the data into the FIFO only if it is meant to be for us.
-		if (m_address == (m_transaction.address & ~1U))
-		{
-			// Get bit that is gonna be sent
-			bool bitToSend = (m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1;
-
-			m_logging_system->Info(("data: " + std::to_string(m_transaction.data)).c_str());
-			m_logging_system->Info(("data_idx: " + std::to_string(m_transaction.data_idx)).c_str());
-			m_logging_system->Info(("bitToSend: " + std::to_string((m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1)).c_str());
-
-			// Set SDA pin to the desired value
-			m_set_pin(m_sda_pin_idx, bitToSend);
-
-			// Were all the bits sent?
-			if (m_transaction.data_idx == 0)
-			{
-				// Remove first item from the FIFO.
-				if (m_transaction.length > 0)
-				{
-					m_transaction.state = NState_Machine::Receive_ACK;
-					//m_output_fifo.erase(m_output_fifo.begin());
-					//m_transaction.data = m_output_fifo[0];
-					//m_transaction.data_idx = Data_Length;
-				}
-				else {
-					m_transaction.request_sended = false;
-				}
-			}
-		}
 	}
 }
 
@@ -427,6 +242,180 @@ void CCgm::SDA_Pin_Change_Callback(bool curr_pin_state)
 
 	// Update the previous state of the SDA pin.
 	m_sda_prev_state = curr_pin_state;
+}
+
+void CCgm::Init_GPIO_Subscription()
+{
+	m_gpio_subscription.insert(m_sda_pin_idx);
+	m_gpio_subscription.insert(m_scl_pin_idx);
+}
+
+void CCgm::I2C_Update()
+{
+	// I2C state machine
+	switch (m_transaction.state)
+	{
+		// Receive the start bit.
+	case NState_Machine::Start_Bit:
+		I2C_Receive_Start_Bit();
+		break;
+
+		// Receive the slave's address.
+	case NState_Machine::Address:
+		I2C_Receive_Address();
+		break;
+
+		// Receive the RW bit.
+	case NState_Machine::RW:
+		I2C_Receive_RW_Bit();
+		break;
+
+		// Send the ACK_1 bit.
+	case NState_Machine::ACK_1:
+		//Send_ACK();
+		m_transaction.state = NState_Machine::Recieve;
+		break;
+
+	case NState_Machine::ACK_1_Send:
+		m_transaction.state = NState_Machine::Send;
+		break;
+
+	case NState_Machine::Recieve:
+		I2C_Receive_Data();
+		break;
+
+		// Receive data (payload).
+	case NState_Machine::Send:
+		I2C_Send_Data();
+		break;
+
+	case NState_Machine::Receive_ACK:
+		I2C_Receive_ACK_2();
+		break;
+
+		// Send the ACK_2 bit.
+	case NState_Machine::ACK_2:
+		// Move on to receiving another byte.
+		m_transaction.data = 0;
+		m_transaction.data_idx = Data_Length;
+		m_transaction.state = NState_Machine::Recieve;
+
+		// Send an ACK bit to the master device.
+		Send_ACK();
+		break;
+	}
+}
+
+void CCgm::I2C_Receive_Start_Bit()
+{
+	if (!m_read_pin(m_sda_pin_idx))
+	{
+		Init_Transaction();
+		m_transaction.state = NState_Machine::Address;
+	}
+}
+
+void CCgm::I2C_Receive_Address()
+{
+	--m_transaction.addr_idx;
+
+	// Read the state of the SDA pin and update the address.
+	if (m_read_pin(m_sda_pin_idx))
+	{
+		m_transaction.address |= (0b1U << m_transaction.addr_idx);
+	}
+
+	// Have we read all bits of the address yet?
+	if (m_transaction.addr_idx == 0)
+	{
+		// Move on to receiving the RW bit.
+		m_transaction.state = NState_Machine::RW;
+	}
+}
+
+void CCgm::I2C_Receive_RW_Bit()
+{
+	// Read the RW bit.
+	m_transaction.read = m_read_pin(m_sda_pin_idx);
+
+	std::cout << "Prisla mi adresa: " << static_cast<std::uint32_t>(m_transaction.address) << std::endl;
+
+	if (((m_transaction.address & 0x01) != 0) && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
+		m_transaction.data = m_output_fifo[0];
+		m_transaction.data_idx = Data_Length;
+		m_transaction.length = sizeof(float);
+		m_transaction.state = NState_Machine::Send;
+		Send_ACK();
+	}
+	else if (((m_transaction.address & 0x01) != 0) && m_address != (m_transaction.address & ~1U)) {
+		m_transaction.state = NState_Machine::Recieve;
+		Send_ACK();
+	}
+	else {
+		Send_ACK();
+		m_transaction.state = NState_Machine::ACK_1;
+	}
+}
+
+void CCgm::I2C_Receive_Data()
+{
+	--m_transaction.data_idx;
+
+	// Read the state of the SDA pin and update the data (receiving byte).
+	if (m_read_pin(m_sda_pin_idx))
+	{
+		m_transaction.data |= (0b1U << m_transaction.data_idx);
+	}
+
+	// Have we read all 8 bits of the data yet?
+	if (m_transaction.data_idx == 0)
+	{
+		// Store the data into the FIFO only if it is meant to be for us.
+		if (m_address == (m_transaction.address & ~1U))
+		{
+			m_fifo.push_back(m_transaction.data);
+		}
+
+		if (!m_transaction.read && m_address == (m_transaction.address & ~1U)) {
+			m_transaction.request_sended = true;
+		}
+
+		m_transaction.state = NState_Machine::ACK_2;
+	}
+}
+
+void CCgm::I2C_Send_Data()
+{
+	if (m_transaction.data_idx > 0) {
+		--m_transaction.data_idx;
+		// Store the data into the FIFO only if it is meant to be for us.
+		if (m_address == (m_transaction.address & ~1U))
+		{
+			// Get bit that is gonna be sent
+			bool bitToSend = (m_transaction.data >> (m_transaction.data_idx % 8)) & 0b1;
+
+			// Set SDA pin to the desired value
+			m_set_pin(m_sda_pin_idx, bitToSend);
+
+			// Were all the bits sent?
+			if (m_transaction.data_idx == 0)
+			{
+				// Remove first item from the FIFO.
+				if (m_transaction.length > 0)
+				{
+					m_transaction.state = NState_Machine::Receive_ACK;
+					//m_output_fifo.erase(m_output_fifo.begin());
+					//m_transaction.data = m_output_fifo[0];
+					//m_transaction.data_idx = Data_Length;
+				}
+				else {
+					m_transaction.request_sended = false;
+					m_clock++;
+					SDA_Pin_Change_Callback(false);
+				}
+			}
+		}
+	}
 }
 
 void CCgm::Updated_Type_Of_Processing_Data(std::uint8_t data)
@@ -499,13 +488,16 @@ void CCgm::Init_Transaction()
 void CCgm::Send_ACK()
 {
 	// Do NOT send an ACK bit to the master devices, unless they are talking to us.
-	if ((m_transaction.address & ~1U) != m_address)
+	/*if ((m_transaction.address & ~1U) != m_address)
 	{
 		return;
-	}
+	}*/
 
 	// Send an ACK bit.
 	const int status = m_set_pin(m_sda_pin_idx, false);
+
+	m_clock++;
+	SDA_Pin_Change_Callback(false);
 
 	// Check for any possible errors.
 	if (status != 0)
@@ -626,15 +618,21 @@ void CCgm::Read_Next_Glycemia()
 			return;
 		}
 
-		Advance(m_patient_idx);
-		m_current_glycemia = Get_Patient_Glucose(m_patient_idx);
+		Advance(0);
+		m_current_glycemia = Get_Patient_Glucose(0);
+
+		auto now = std::chrono::system_clock::now();
+		std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+
+		file << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S")
+			<< " - " << m_current_glycemia << "\n";
 	}
 
 	std::stringstream ss{};
 
 	ss << static_cast<double>(m_current_glycemia);
 
-	m_logging_system->Info(("Patient glycemia: " + ss.str()).c_str());
+	m_logging_system->Info(("Patient next glycemia: " + ss.str()).c_str());
 
 	byte bytes[sizeof(float)];
 	memcpy(bytes, &m_current_glycemia, sizeof(float));
@@ -666,7 +664,7 @@ void CCgm::Read_Current_Glycemia()
 
 	ss << static_cast<double>(m_current_glycemia);
 
-	m_logging_system->Info(("Patient glycemia: " + ss.str()).c_str());
+	//m_logging_system->Info(("Patient current glycemia: " + ss.str()).c_str());
 
 	byte bytes[sizeof(float)];
 	memcpy(bytes, &m_current_glycemia, sizeof(float));

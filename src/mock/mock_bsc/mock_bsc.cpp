@@ -102,6 +102,8 @@ namespace zero_mate::peripheral
             m_regs[static_cast<std::uint32_t>(NRegister::Status)] &=
                 ~static_cast<std::uint32_t>(NStatus_Flags::Transfer_Done);
 
+            //std::cout << "Posilam begin: " << true << std::endl;
+
             // Pull voltage on both SDA and SCL to high.
             Set_GPIO_pin(SDA_Pin_Idx, true);
             Set_GPIO_pin(SCL_Pin_Idx, true);
@@ -188,54 +190,54 @@ namespace zero_mate::peripheral
         {
             // Send the start bit.
         case NState_Machine::Start_Bit:
-            std::cout << "bsc Start_Bit\n";
+            //std::cout << "bsc Start_Bit\n";
             I2C_Send_Start_Bit();
             break;
 
             // Send the slave's address.
         case NState_Machine::Address:
-            std::cout << "bsc Address\n";
+            //std::cout << "bsc Address " << static_cast<std::uint32_t>(m_transaction.addr_idx) << std::endl;
             I2C_Send_Slave_Address();
             break;
 
             // Send the RW bit.
         case NState_Machine::RW:
-            std::cout << "bsc RW\n";
+            //std::cout << "bsc RW\n";
             I2C_Send_RW_Bit();
             break;
 
             // Receive the ACK_1 bit.
         case NState_Machine::ACK_1:
-            std::cout << "bsc ACK_1\n";
+            //std::cout << "bsc ACK_1\n";
             I2C_Receive_ACK_1();
             break;
 
             // Send the data payload.
         case NState_Machine::Send:
-            std::cout << "bsc Send\n";
+            //std::cout << "bsc Send " << static_cast<std::uint32_t>(m_transaction.data_idx) << std::endl;
             I2C_Send_Data();
             break;
 
             // Send the data payload.
         case NState_Machine::Recieve:
-            std::cout << "bsc Recieve\n";
+            //std::cout << "bsc Recieve " << static_cast<std::uint32_t>(m_transaction.data_idx) << std::endl;
             I2C_Recieve_Data();
             break;
 
             // Receive the ACK_2 bit.
         case NState_Machine::ACK_2:
-            std::cout << "bsc ACK_2\n";
+            //std::cout << "bsc ACK_2\n";
             I2C_Receive_ACK_2();
             break;
 
         case NState_Machine::Send_ACK_2:
-            std::cout << "bsc Send_ACK_2\n";
+            //std::cout << "bsc Send_ACK_2\n";
             I2C_Send_ACK();
             break;
 
             // Send the stop bit.
         case NState_Machine::Stop_Bit:
-            std::cout << "bsc Stop_Bit\n";
+            //std::cout << "bsc Stop_Bit\n";
             I2C_Send_Stop_Bit();
             break;
         }
@@ -243,6 +245,8 @@ namespace zero_mate::peripheral
 
     void Mock_BSC::I2C_Send_Start_Bit()
     {
+
+        //std::cout << "Posilam start bit: " << false << std::endl;
         // SDA goes low.
         Set_GPIO_pin(SDA_Pin_Idx, false);
 
@@ -255,6 +259,10 @@ namespace zero_mate::peripheral
         // Get the current bit of the slave's address.
         --m_transaction.addr_idx;
         const auto curr_bit = static_cast<bool>((m_transaction.address >> m_transaction.addr_idx) & 0b1U);
+
+        //std::cout << "Posilam adresu: " << static_cast<std::uint32_t>(m_transaction.address) << "index: " << static_cast<std::uint32_t>(m_transaction.addr_idx) << std::endl;
+
+        //std::cout << "Posilam adresu: " << curr_bit << std::endl;
 
         // Send the bit out to the target device.
         Set_GPIO_pin(SDA_Pin_Idx, curr_bit);
@@ -270,6 +278,7 @@ namespace zero_mate::peripheral
     void Mock_BSC::I2C_Send_RW_Bit()
     {
         // Send the RW bit to the device and move on to receiving the ACK_1 bit.
+        //std::cout << "Posilam RW: " << m_transaction.read << std::endl;
         Set_GPIO_pin(SDA_Pin_Idx, m_transaction.read);
         m_transaction.state = NState_Machine::ACK_1;
     }
@@ -280,6 +289,7 @@ namespace zero_mate::peripheral
         if (m_gpio->Read_GPIO_Pin(SDA_Pin_Idx) != IGPIO_Manager::IPin::NState::Low)
         {
             // Report any errors.
+            //std::cout << "Nepodarilo se prijmout ACK1\n";
         }
 
         // Move on to sending the data payload itself.
@@ -299,14 +309,14 @@ namespace zero_mate::peripheral
         --m_transaction.data_idx;
 
         // Make sure there's data in the FIFO.
-        if (m_fifo.empty())
-        {
-            
-        }
-        else
+        if (!m_fifo.empty())
         {
             curr_bit = static_cast<bool>(static_cast<std::uint8_t>(m_fifo.front() >> m_transaction.data_idx) & 0b1U);
         }
+
+        //std::cout << "Posla (BSC) jsem " << curr_bit << " s indexem: " << m_transaction.data_idx % 8 << std::endl;
+
+        //std::cout << "Posilam data: " << curr_bit << std::endl;
 
         // Send out the current bit of the data payload.
         Set_GPIO_pin(SDA_Pin_Idx, curr_bit);
@@ -338,9 +348,12 @@ namespace zero_mate::peripheral
             m_transaction.data |= (0b1U << (m_transaction.data_idx % 8));
         }
 
+        //std::cout << "Prijal (BSC) jsem " << curr_bit << " s indexem: " << static_cast<std::uint32_t>(m_transaction.data_idx) << std::endl;
+
         if (m_transaction.data_idx == 0)
         {
             m_fifo.push(m_transaction.data);
+            //std::cout << "Prijal jsem byte: " << static_cast<std::uint32_t>(m_transaction.data) << std::endl;
             m_transaction.data = { 0 };
             if (m_transaction.length == 0) {
                 m_transaction.state = NState_Machine::Stop_Bit;
@@ -388,6 +401,8 @@ namespace zero_mate::peripheral
 
     void Mock_BSC::I2C_Send_ACK() {
         // Send an ACK bit.
+        //std::cout << "Posilam ACK: " << false << std::endl;
+
         Set_GPIO_pin(SDA_Pin_Idx, false);
 
         if (m_transaction.length != 0)
@@ -407,6 +422,10 @@ namespace zero_mate::peripheral
     {
         // SCL goes high before SDA.
         Set_GPIO_pin(SCL_Pin_Idx, true);
+
+        //std::cout << "Poslal jsem stop bit SCL\n";
+
+        //std::cout << "Poslal jsem stop bit SDA\n";
 
         // Terminate the transaction.
         Terminate_Transaction();
@@ -436,11 +455,13 @@ namespace zero_mate::peripheral
             break;
 
         case NSCL_State::SCL_High:
+            //std::cout << "Nastavuju v NSCL_State::SCL_High\n";
             Set_GPIO_pin(SCL_Pin_Idx, true);
             m_SCL_state = NSCL_State::SCL_Low;
             break;
 
         case NSCL_State::SCL_Low:
+            //std::cout << "Nastavuju v NSCL_State::SCL_Low\n";
             Set_GPIO_pin(SCL_Pin_Idx, false);
             m_SCL_state = NSCL_State::SDA_Change;
             break;
@@ -451,6 +472,8 @@ namespace zero_mate::peripheral
     {
         // We are done with the current transaction.
         m_transaction_in_progress = false;
+
+        //std::cout << "Posilam terminate: " << true << std::endl;
 
         // SDA goes high after SCL.
         Set_GPIO_pin(SDA_Pin_Idx, true);

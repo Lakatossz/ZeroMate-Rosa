@@ -24,23 +24,13 @@
 
 #include "../../core/peripherals/ibsc.hpp"
 
-#ifdef _WIN32
-    #ifdef ZM_MOCK_GPIO_EXPORT
-        #define ZM_MOCK_GPIO_API __declspec(dllexport)
-    #else
-        #define ZM_MOCK_GPIO_API __declspec(dllimport)
-    #endif
-    #else
-        #define ZM_MOCK_GPIO_API
-#endif
-
 namespace zero_mate::peripheral
 {
     // -----------------------------------------------------------------------------------------------------------------
     /// \class CGPIO_Manager_Mock
     /// \brief This class represents a GPIO (general-purpose I/O) manager.
     // -----------------------------------------------------------------------------------------------------------------
-    class ZM_MOCK_GPIO_API CGPIO_Manager_Mock final : public IGPIO_Manager
+    class CGPIO_Manager_Mock final : public IGPIO_Manager
     {
 
         // -------------------------------------------------------------------------------------------------------------
@@ -195,6 +185,8 @@ namespace zero_mate::peripheral
         /// \return Information about whether the state has been changed successfully or not
         // -------------------------------------------------------------------------------------------------------------
         [[nodiscard]] IGPIO_Manager::IPin::NPin_Set_Status Set_Pin_State(std::size_t pin_idx, Mock_Pin::NState state) override;
+
+        [[nodiscard]] IGPIO_Manager::IPin::NPin_Set_Status Set_Pin_State_Without_Notify(std::size_t pin_idx, Mock_Pin::NState state);
 
         void Enable_HW_Reset_Listening(uint32_t pin_idx) override;
 

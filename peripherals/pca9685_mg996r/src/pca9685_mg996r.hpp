@@ -23,6 +23,8 @@
 #include <sstream>
 #include <string>
 #include <random>
+#include <chrono>
+#include <ctime>
 /// \endcond
 
 #include "imgui.h"
@@ -95,7 +97,7 @@ bool Resolve_Functions(std::string lib_name) {
 	return true;
 }
 
-#define STEPS_TO_UNITS 0.1f
+#define STEPS_TO_UNITS 0.001f
 
 // ---------------------------------------------------------------------------------------------------------------------
 /// \class CPca9685_Mg996r
@@ -127,8 +129,8 @@ public:
 
 	enum class Status : std::uint8_t
 	{
-		OK = 0,
-		Hall_Effect_Error = 1,
+		OK = 1,
+		Hall_Effect_Error = 2,
 	};
 
 	// -----------------------------------------------------------------------------------------------------------------
@@ -383,4 +385,6 @@ private:
 	uint32_t m_error_probability;
 
 	bool m_motor_failure;										///<
+
+	std::ofstream file;
 };

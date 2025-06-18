@@ -43,7 +43,7 @@ namespace zero_mate::gui
                                  bool& scroll_to_curr_line,
                                  const bool& elf_file_has_been_loaded,
                                  bool& cpu_running,
-                                 const std::string& kernel_filename);
+                                 std::shared_ptr<std::string> kernel_filename);
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Deletes the object from memory.
@@ -112,7 +112,7 @@ namespace zero_mate::gui
         bool m_breakpoint_hit;                          ///< Has CPU execution hit a breakpoint?
         std::atomic<bool> m_start_cpu_thread;           ///< Flag indicating that CPU execution should be started
         std::atomic<bool> m_stop_cpu_thread;            ///< Flag indicating that CPU execution should be stopped
-        const std::string& m_kernel_filename;           ///< Name (filepath) of the currently loaded kernel
+        std::shared_ptr<std::string> m_kernel_filename; ///< Name (filepath) of the currently loaded kernel
     };
 
 } // namespace zero_mate::gui

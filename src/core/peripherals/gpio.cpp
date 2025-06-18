@@ -500,6 +500,58 @@ namespace zero_mate::peripheral
         return IGPIO_Manager::IPin::NPin_Set_Status::OK;
     }
 
+    IGPIO_Manager::IPin::NPin_Set_Status CGPIO_Manager::Set_Pin_State_Without_Notify(std::size_t pin_idx, IPin::NState state)
+    {
+        // Make sure pin_idx is valid.
+        if (pin_idx >= Number_of_GPIO_Pins)
+        {
+            return IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Number;
+        }
+
+        // Get the pin by its index.
+        auto& pin = m_pins[pin_idx];
+
+        const IPin::NFunction pin_function = pin.Get_Function();
+
+        // Make sure the pin function has been set to input.
+        // clang-format off
+        if ((pin_function != IPin::NFunction::Input) &&
+            (pin_function != IPin::NFunction::Alt_5) &&
+            (pin_function != IPin::NFunction::Alt_0))
+        {
+            return IGPIO_Manager::IPin::NPin_Set_Status::Invalid_Pin_Function;
+        }
+        // clang-format on
+
+        // Check if changing the pin's state triggers an interrupt.
+        // This must be checked before the state is changed.
+        const bool interrupt_detected = pin.Is_Interrupt_Detected(state);
+
+        // Change the state of the pin.
+        pin.Set_State(state);
+        Mirror_Pin_State_In_GPLEVn(pin_idx, state);
+
+        // Notify external peripherals.
+        //Notify_External_Peripherals(static_cast<std::uint32_t>(pin_idx));
+
+        if (interrupt_detected)
+        {
+            // Set a pending interrupt on the pin.
+            pin.Set_Pending_IRQ(true);
+
+            // Reflect the pending IRQ in GPEDS.
+            Update_GPEDS(pin_idx);
+
+            // Convert the pin index into an IRQ source.
+            const auto irq_source = CInterrupt_Controller::Get_IRQ_Source(pin_idx);
+
+            // Notify the interrupt controller.
+            m_interrupt_controller->Signalize_IRQ(irq_source);
+        }
+
+        return IGPIO_Manager::IPin::NPin_Set_Status::OK;
+    }
+
     void CGPIO_Manager::Enable_HW_Reset_Listening(uint32_t pin_idx)
     {
         m_reset_pin = pin_idx;

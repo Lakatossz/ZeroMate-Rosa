@@ -62,6 +62,8 @@ CPca9685_Mg996r::~CPca9685_Mg996r()
 {
 	if (m_patient_idx >= 0)
 		Terminate_Patient(m_patient_idx);
+
+	file.close();
 }
 
 void CPca9685_Mg996r::Set_ImGui_Context(void* context)
@@ -84,7 +86,7 @@ nlohmann::json CPca9685_Mg996r::Parse_JSON_File(const std::string& path)
 	// Make sure the file has been opened successfully.
 	if (!config_file)
 	{
-		m_logging_system->Error("Cannot load");
+		m_logging_system->Error(("Cannot load configuraiton " + path).c_str());
 
 		// Return an empty JSON object.
 		return {};
@@ -110,7 +112,7 @@ bool CPca9685_Mg996r::Init_Motor_State()
 {
 	nlohmann::json j = Parse_JSON_File(Pca9685_Mg996r_Config_File);
 
-	if (j.contains("configuration") &&
+	if (!j.empty() && j.contains("configuration") &&
 		j["configuration"].is_array() &&
 		!j["configuration"].empty())
 	{
@@ -130,6 +132,11 @@ bool CPca9685_Mg996r::Init_Motor_State()
 				m_logging_system->Error("Failed to create patient");
 				return false;
 			}
+			// Docasne reseni - pocita se s tim, ze bude jenom jeden pacient
+			else if (m_patient_idx > 0) {
+				Terminate_Patient(m_patient_idx);
+				m_patient_idx = 0;
+			}
 		}
 		else
 			return false;
@@ -147,6 +154,8 @@ bool CPca9685_Mg996r::Init_Motor_State()
 		m_logging_system->Error("Could not create patient cause not correct config file");
 		return false;
 	}
+
+	file = std::ofstream("patient_input_log.txt", std::ios::out);
 
 	return true;
 }
@@ -196,17 +205,15 @@ void CPca9685_Mg996r::GPIO_Subscription_Callback([[maybe_unused]] std::uint32_t 
 	// Check if the master has just sent a stop bit.
 	// Definition of a stop bit: SDA goes high after SCL
 	const bool stop_bit_detected = m_sda_rising_edge && m_scl_rising_edge &&
-									(m_sda_rising_edge_timestamp - m_scl_rising_edge_timestamp) == 1 &&
-									((m_transaction.state == NState_Machine::Recieve && (m_transaction.data_idx == 0 || m_transaction.data_idx == 7)) ||
-										(m_transaction.state == NState_Machine::Send && 
-											m_transaction.length == 0 &&
-											m_transaction.data_idx == 0) || 
-										(m_transaction.state == NState_Machine::ACK_2 && m_address == (m_transaction.address & ~1U)));
+		(m_sda_rising_edge_timestamp - m_scl_rising_edge_timestamp) == 1 &&
+		(m_transaction.state == NState_Machine::Recieve && (m_transaction.data_idx == 0 || m_transaction.data_idx == 7) ||
+			(m_transaction.state == NState_Machine::Send &&
+				m_transaction.length == 0 &&
+				m_transaction.data_idx == 0));
 
 	// If a stop bit has just been detected, terminate the current transaction.
 	if (stop_bit_detected)
 	{
-		m_logging_system->Info(("Nastavuju Start_Bit: " + std::to_string(m_transaction.data_idx)).c_str());
 		m_transaction.state = NState_Machine::Start_Bit;
 		Received_Transaction_Callback();
 	}
@@ -260,57 +267,49 @@ void CPca9685_Mg996r::I2C_Update()
 	{
 	// Receive the start bit.
 	case NState_Machine::Start_Bit:
-		m_logging_system->Info("NState_Machine::Start_Bit");
 		I2C_Receive_Start_Bit();
 		break;
 
 	// Receive the slave's address.
 	case NState_Machine::Address:
-		m_logging_system->Info("Address");
 		I2C_Receive_Address();
 		break;
 
 	// Receive the RW bit.
 	case NState_Machine::RW:
-		m_logging_system->Info("RW");
 		I2C_Receive_RW_Bit();
 		break;
 
 	// Send the ACK_1 bit.
 	case NState_Machine::ACK_1:
-		m_logging_system->Info("ACK_1");
 		m_transaction.state = NState_Machine::Recieve;
 		break;
 
 	case NState_Machine::ACK_1_Send:
-		m_logging_system->Info("ACK_1_Send");
 		m_transaction.state = NState_Machine::Send;
 		break;
 
 	case NState_Machine::Recieve:
-		m_logging_system->Info("Recieve");
 		I2C_Receive_Data();
 		break;
 
 		// Receive data (payload).
 	case NState_Machine::Send:
-		m_logging_system->Info("Send");
 		I2C_Send_Data();
 		break;
 
 	case NState_Machine::Receive_ACK:
-		m_logging_system->Info("Receive_ACK_2");
 		I2C_Receive_ACK_2();
 		break;
 
 		// Send the ACK_2 bit.
 	case NState_Machine::ACK_2:
 		m_transaction.state = NState_Machine::Recieve;
-		m_logging_system->Info("ACK_2");
 		// Move on to receiving another byte.
-		//m_transaction.request_sended = false;
 		m_transaction.data = 0;
 		m_transaction.data_idx = Data_Length;
+		// Send an ACK bit to the master device.
+		Send_ACK();
 		break;
 	}
 }
@@ -379,8 +378,6 @@ void CPca9685_Mg996r::Process_Data(std::uint8_t data)
 {
 	if (m_fifo.size() > 2) {
 		uint16_t combined = (static_cast<uint16_t>(m_fifo[1]) << 8) | m_fifo[2];
-
-		m_logging_system->Info(std::to_string(combined).c_str());
 	}
 
 	// Go through individual bits of the received byte of data.
@@ -456,7 +453,6 @@ void CPca9685_Mg996r::I2C_Receive_Address()
 	// Have we read all bits of the address yet?
 	if (m_transaction.addr_idx == 0)
 	{
-		m_logging_system->Info("Nastavuju NState_Machine::RW");
 		// Move on to receiving the RW bit.
 		m_transaction.state = NState_Machine::RW;
 	}
@@ -467,18 +463,21 @@ void CPca9685_Mg996r::I2C_Receive_RW_Bit()
 	// Read the RW bit.
 	m_transaction.read = m_read_pin(m_sda_pin_idx);
 
-	m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
-
-	Send_ACK();
-
-	if (m_transaction.read && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
-		m_logging_system->Info("Nastavuju NState_Machine::Send");
+	if (((m_transaction.address & 0x01) != 0) && m_address == (m_transaction.address & ~1U) && m_transaction.request_sended) {
 		m_transaction.data = m_output_fifo[0];
 		m_transaction.data_idx = Data_Length;
-		m_transaction.length = sizeof(float);
+		m_transaction.length = sizeof(std::uint8_t);
 		m_transaction.state = NState_Machine::Send;
-	} else 
+		Send_ACK();
+	}
+	else if (((m_transaction.address & 0x01) != 0) && m_address != (m_transaction.address & ~1U)) {
+		m_transaction.state = NState_Machine::Recieve;
+		Send_ACK();
+	}
+	else {
+		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_1;
+	}
 }
 
 void CPca9685_Mg996r::I2C_Receive_Data()
@@ -491,33 +490,19 @@ void CPca9685_Mg996r::I2C_Receive_Data()
 		m_transaction.data |= (0b1U << m_transaction.data_idx);
 	}
 
-	m_logging_system->Info(std::to_string(m_transaction.data_idx).c_str());
-
 	// Have we read all 8 bits of the data yet?
 	if (m_transaction.data_idx == 0)
 	{
-		m_logging_system->Info(std::to_string((m_transaction.address & ~1U)).c_str());
 		// Store the data into the FIFO only if it is meant to be for us.
 		if (m_address == (m_transaction.address & ~1U))
 		{
 			m_fifo.push_back(m_transaction.data);
-
-			// Send an ACK bit to the master device.
-			//Send_ACK();
 		}
 
 		if (!m_transaction.read && m_address == (m_transaction.address & ~1U)) {
-			//m_transaction.state = NState_Machine::ACK_2;
 			m_transaction.request_sended = true;
-			//m_transaction.data_idx = Data_Length;
-		}
-		else {
-			// Nemel by tady byt, protoze vsichni museji jit do ACK, ale posle ho jen ten, ci adresa to byla
-			//m_transaction.state = NState_Machine::Start_Bit;
 		}
 
-		// Send an ACK bit to the master device.
-		Send_ACK();
 		m_transaction.state = NState_Machine::ACK_2;
 	}
 }
@@ -525,13 +510,16 @@ void CPca9685_Mg996r::I2C_Receive_Data()
 void CPca9685_Mg996r::Send_ACK()
 {
 	// Do NOT send an ACK bit to the master devices, unless they are talking to us.
-	if (m_transaction.address != m_address)
-	{
-		return;
-	}
+	//if ((m_transaction.address & ~1U) != m_address)
+	//{
+	//	return;
+	//}
 
 	// Send an ACK bit.
 	const int status = m_set_pin(m_sda_pin_idx, false);
+
+	m_clock++;
+	SDA_Pin_Change_Callback(false);
 
 	// Check for any possible errors.
 	if (status != 0)
@@ -559,14 +547,7 @@ void CPca9685_Mg996r::I2C_Receive_ACK_2()
 void CPca9685_Mg996r::I2C_Send_Data()
 {
 	if (m_transaction.data_idx > 0) {
-		if (m_transaction.data_idx % 8 == 0) {
-			--m_transaction.data_idx;
-			m_transaction.data = m_output_fifo[0];
-		}
-		else {
-			--m_transaction.data_idx;
-		}
-
+		--m_transaction.data_idx;
 		// Store the data into the FIFO only if it is meant to be for us.
 		if (m_address == (m_transaction.address & ~1U))
 		{
@@ -583,11 +564,12 @@ void CPca9685_Mg996r::I2C_Send_Data()
 				if (m_transaction.length > 0)
 				{
 					m_transaction.state = NState_Machine::Receive_ACK;
-					//m_output_fifo.erase(m_output_fifo.begin());
-					//m_transaction.data_idx = Data_Length;
 				}
 				else {
 					m_transaction.request_sended = false;
+
+					m_clock++;
+					SDA_Pin_Change_Callback(false);
 				}
 			}
 		}
@@ -606,9 +588,11 @@ void CPca9685_Mg996r::Render_Motor()
 	{
 		if (m_motor_failure) {
 			m_logging_system->Error("Doslo k poruse motoru");
+			m_error_probability = 100;
 		}
 		else {
 			m_logging_system->Info("Porucha motoru byla opravena");
+			m_error_probability = m_error_probability_referenced;
 		}
 	}
 }
@@ -623,6 +607,7 @@ void CPca9685_Mg996r::Error_Fixed()
 {
 	m_logging_system->Error("Chyba motoru byla opravena.");
 	m_error_probability = m_error_probability_referenced;
+	m_status = static_cast<std::uint8_t>(Status::OK);
 }
 
 void CPca9685_Mg996r::Check_Status()
@@ -639,6 +624,9 @@ void CPca9685_Mg996r::Check_Status()
 
 	if (random_value < m_error_probability) {
 		m_status = static_cast<std::uint8_t>(Status::Hall_Effect_Error); //1 Oznacuje chybu, ktera se posle pres I2C
+	}
+	else {
+		m_status = static_cast<std::uint8_t>(Status::OK);
 	}
 }
 
@@ -660,6 +648,11 @@ void CPca9685_Mg996r::Push_Forward(std::uint8_t steps)
 				return;
 			}
 
+			auto now = std::chrono::system_clock::now();
+			std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+
+			file << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S")
+				<< " - " << (steps * STEPS_TO_UNITS) << "\n";
 			Dose_Insulin(m_patient_idx, static_cast<float>(steps * STEPS_TO_UNITS));
 
 			m_first_part_loeaded = false;
@@ -671,8 +664,6 @@ void CPca9685_Mg996r::Push_Forward(std::uint8_t steps)
 			m_steps_to_move = (uint16_t)steps;
 		}
 		Check_Status();
-
-		m_logging_system->Info("Posunul jsem motor");
 	}
 
 	// Lock incoming data.
@@ -717,7 +708,6 @@ void CPca9685_Mg996r::Read_Status()
 {
 	m_output_fifo.clear();
 	m_output_fifo.push_back(m_status);
-	m_logging_system->Info(("Davam do fifo: " + std::to_string(m_status)).c_str());
 }
 
 extern "C"

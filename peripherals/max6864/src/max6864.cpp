@@ -20,14 +20,18 @@ CMax6864::CMax6864(const std::string& name,
 	, m_bark{ false }
 	, m_output{ true }
 	, m_should_stop{ false }
+	, m_wdt_thread{ }
 {
 	Init_GPIO_Subscription();
+	// Initialize logic of the WDT
 	Initialize();
+	// Start control loop of WDT in separated thread
 	m_wdt_thread = std::thread(&CMax6864::Control_Loop, this);
 }
 
 CMax6864::~CMax6864()
 {
+	// Stop separeted therad
 	if (m_wdt_thread.joinable()) {
 		m_should_stop = true;
 		m_wdt_thread.join();
@@ -42,7 +46,7 @@ nlohmann::json CMax6864::Parse_JSON_File(const std::string& path)
 	// Make sure the file has been opened successfully.
 	if (!config_file)
 	{
-		m_logging_system->Error("Cannot load ");
+		m_logging_system->Error(("Cannot load configuraiton " + path).c_str());
 
 		// Return an empty JSON object.
 		return {};
@@ -66,9 +70,9 @@ nlohmann::json CMax6864::Parse_JSON_File(const std::string& path)
 
 void CMax6864::Initialize()
 {
-	nlohmann::json j = Parse_JSON_File(CMax6864_Config_File);
+	nlohmann::json j = Parse_JSON_File(Max6864_Config_File);
 
-	if (j.contains("configuration") &&
+	if (!j.empty() && j.contains("configuration") &&
 		j["configuration"].is_array() &&
 		!j["configuration"].empty())
 	{
@@ -81,20 +85,16 @@ void CMax6864::Initialize()
 		}
 	}
 
-	last_kick_ticks.store(
-		std::chrono::steady_clock::now().time_since_epoch().count(),
-		std::memory_order_relaxed
-	);
+	last_kick.store(std::chrono::steady_clock::now(), std::memory_order_release);
 }
 
 void CMax6864::GPIO_Subscription_Callback(std::uint32_t pin_idx)
 {
+	// Initialize listening for kicks
 	if (pin_idx == m_pin_wdi_idx) {
 		m_pin_high = m_read_pin(pin_idx);
-		last_kick_ticks.store(
-			std::chrono::steady_clock::now().time_since_epoch().count(),
-			std::memory_order_relaxed
-		);
+		// If kicked, update time of last_kick timestamp
+		last_kick.store(std::chrono::steady_clock::now(), std::memory_order_release);
 	}
 }
 
@@ -141,7 +141,6 @@ void CMax6864::Render_WDT()
 		{
 			if (!m_output && !ImGui::IsItemActive())
 			{
-				m_logging_system->Info("Releasnulo se tlacitko");
 				m_output = true;
 				m_set_pin(m_pin_reset_idx, !m_output);
 			}
@@ -155,37 +154,33 @@ void CMax6864::Render_WDT()
 
 void CMax6864::Bark()
 {
-	m_output = false;
+	// Log message
 	m_logging_system->Error(TIME_OUT_MESSAGE);
+	
+	// Set pulse on reset pin
+	m_set_pin(m_pin_reset_idx, m_output);
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	m_set_pin(m_pin_reset_idx, !m_output);
 
-	std::cout << "Stekam"  << std::endl;
-	last_kick_ticks.store(
-		std::chrono::steady_clock::now().time_since_epoch().count(),
-		std::memory_order_relaxed
-	);
+	// Update time of last_kick timestamp
+	last_kick.store(std::chrono::steady_clock::now(), std::memory_order_release);
 }
 
 void CMax6864::Control_Loop()
 {
-	while (!m_should_stop.load(std::memory_order_relaxed)) {
+	// In loop check whether the WDT the interval is comming to an end
+	while (!m_should_stop.load(std::memory_order_acquire)) {
 		auto now = std::chrono::steady_clock::now();
-		auto ticks = last_kick_ticks.load(std::memory_order_relaxed);
-		auto time_point = std::chrono::steady_clock::time_point(
-			std::chrono::steady_clock::duration(ticks)
-		);
-		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - time_point).count();
+		auto last_kick_time = last_kick.load(std::memory_order_acquire);
+		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_kick_time);
 
-		if (elapsed > m_time_interval) {
+		// If the interval passed, bark
+		if (elapsed.count() > m_time_interval) {
 			Bark();
-
-			std::this_thread::sleep_for(std::chrono::seconds(1));
-
-			m_output = true;
-			m_set_pin(m_pin_reset_idx, !m_output);
+			break;
 		}
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}
 }
 

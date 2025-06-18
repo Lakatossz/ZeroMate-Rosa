@@ -57,12 +57,6 @@ namespace zero_mate::coprocessor
         ICoprocessor& operator=(const ICoprocessor&) = delete;
 
         // -------------------------------------------------------------------------------------------------------------
-        /// \brief Sets the CPU core.
-        /// \param cpu_core Reference to the CPU core
-        // -------------------------------------------------------------------------------------------------------------
-        void Set_CPU_Core(std::weak_ptr<arm1176jzf_s::CCPU_Core> cpu_core);
-
-        // -------------------------------------------------------------------------------------------------------------
         /// \brief Deleted move constructor (rule of five).
         // -------------------------------------------------------------------------------------------------------------
         ICoprocessor(ICoprocessor&&) = delete;
@@ -72,6 +66,12 @@ namespace zero_mate::coprocessor
         /// \return Instance of this class
         // -------------------------------------------------------------------------------------------------------------
         ICoprocessor& operator=(ICoprocessor&&) = delete;
+
+        // -------------------------------------------------------------------------------------------------------------
+        /// \brief Sets the reference to the CPU core for e.g., the possibility to translate addresses
+        /// \param cpu_core Reference to the CPU core
+        // -------------------------------------------------------------------------------------------------------------
+        void Set_CPU_Core(std::weak_ptr<arm1176jzf_s::CCPU_Core> cpu_core);
 
         // -------------------------------------------------------------------------------------------------------------
         /// \brief Resets the coprocessor.

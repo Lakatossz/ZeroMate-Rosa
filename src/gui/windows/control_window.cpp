@@ -45,7 +45,7 @@ namespace zero_mate::gui
                                      bool& scroll_to_curr_line,
                                      const bool& elf_file_has_been_loaded,
                                      bool& cpu_running,
-                                     const std::string& kernel_filename)
+                                     std::shared_ptr<std::string> kernel_filename)
     : m_cpu{ cpu }
     , m_scroll_to_curr_line{ scroll_to_curr_line }
     , m_elf_file_has_been_loaded{ elf_file_has_been_loaded }
@@ -97,7 +97,7 @@ namespace zero_mate::gui
 
     void CControl_Window::Render_Currently_Loaded_Kernel()
     {
-        ImGui::Text("Loaded kernel: %s", m_kernel_filename.c_str());
+        ImGui::Text("Loaded kernel: %s", m_kernel_filename->c_str());
     }
 
     void CControl_Window::Start_CPU_Thread()
